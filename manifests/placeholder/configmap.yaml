@@ -1,0 +1,6 @@
+apiVersoin: v1
+kind: ConfigMap
+metadata:
+  name: sddp-placeholder
+data:
+  note: "app-of-apps placeholder - replaced by real platform components in PCFG tickets"
