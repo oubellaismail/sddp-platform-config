@@ -1,4 +1,4 @@
-apiVersoin: v1
+apiVersion: v1
 kind: ConfigMap
 metadata:
   name: sddp-placeholder
