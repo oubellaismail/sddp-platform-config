@@ -11,8 +11,9 @@ metadata:
       'small' tier into omitted fields; validates presence + the 'large'
       tier ceiling. A CPU limit is permitted but not required (spec v1.2:
       CPU is compressible, a CPU limit only throttles). Maps to POL-SDDP-001
-      POL-03. Currently Audit mode pending ArgoCD gaining explicit resources
-      (tracked as a dependency before flipping to Enforce).
+      POL-03. Enforce mode (fail-closed, spec §1.2): audited first, then
+      ArgoCD given explicit resources in sddp-infrastructure so it complies,
+      then flipped.
 spec:
   # Scan existing resources too, so Audit-mode PolicyReports cover the pods
   # already running (this is how we'll see which platform pods lack limits).
@@ -51,7 +52,7 @@ spec:
     # tier ceiling. In a Kyverno pattern, a field written with an operator
     # (e.g. "<=500m") is BOTH required-to-be-present AND bounded — so this one
     # block enforces presence and the "can't claim a whole node" ceiling at
-    # once. failureAction: Audit = report only, block nothing yet.
+    # once. failureAction: Enforce = reject violating admissions.
     - name: require-resources-within-large-tier
       match:
         any:
@@ -64,7 +65,7 @@ spec:
               namespaces:
                 - kube-system
       validate:
-        failureAction: Audit
+        failureAction: Enforce
         message: >-
           Every container must set a CPU request, memory request, and memory
           limit, and stay within the large tier ceiling (cpu request <=500m,
