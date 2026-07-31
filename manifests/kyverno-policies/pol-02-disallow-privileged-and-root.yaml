@@ -10,8 +10,8 @@ metadata:
       Mutates omitted securityContext defaults (runAsNonRoot, seccomp) so
       forgetful-but-safe workloads pass rather than being rejected, then
       validates the result against the restricted profile. Maps to
-      POL-SDDP-001 POL-02. Currently in Audit mode (report-only) pending
-      review of platform-namespace compliance before flipping to Enforce.
+      POL-SDDP-001 POL-02. Enforce mode (fail-closed, spec §1.2): audited
+      first, confirmed all platform pods restricted-compliant, then flipped.
 spec:
   # Evaluate already-running resources in the background too, so Audit-mode
   # PolicyReports cover the existing platform pods, not just new admissions.
@@ -50,7 +50,7 @@ spec:
     # privileged, host namespaces, hostPath, allowPrivilegeEscalation,
     # capabilities, runAsNonRoot, seccomp, etc. runAsUser is deliberately NOT
     # asserted here beyond "not zero" — restricted requires no specific UID
-    # (spec v1.1). failureAction: Audit = report violations, block nothing yet.
+    # (spec v1.1). failureAction: Enforce = reject violating admissions.
     - name: restricted-profile
       match:
         any:
@@ -63,7 +63,7 @@ spec:
               namespaces:
                 - kube-system
       validate:
-        failureAction: Audit
+        failureAction: Enforce
         podSecurity:
           level: restricted
           version: latest
