@@ -1,0 +1,22 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: kyverno-policies
+  namespace: argocd
+spec:
+  project: default
+  source:
+    # Raw manifests in THIS repo (path-based), like the old placeholder app —
+    # not a Helm chart. This is where POL-02/03/05 and future policies live.
+    repoURL: git@github.com:oubellaismail/sddp-platform-config.git
+    targetRevision: main
+    path: manifests/kyverno-policies
+  destination:
+    server: https://kubernetes.default.svc
+    # ClusterPolicy is cluster-scoped, so this namespace is nominal (nothing
+    # namespaced is created here) — kept as kyverno to group logically.
+    namespace: kyverno
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true

@@ -1,0 +1,69 @@
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: pol-02-disallow-privileged-and-root
+  annotations:
+    policies.kyverno.io/title: "POL-02 — Disallow privileged and root containers"
+    policies.kyverno.io/category: "Pod Security Standards (Restricted)"
+    policies.kyverno.io/description: >-
+      Enforces the Kubernetes Pod Security Standard 'restricted' profile.
+      Mutates omitted securityContext defaults (runAsNonRoot, seccomp) so
+      forgetful-but-safe workloads pass rather than being rejected, then
+      validates the result against the restricted profile. Maps to
+      POL-SDDP-001 POL-02. Currently in Audit mode (report-only) pending
+      review of platform-namespace compliance before flipping to Enforce.
+spec:
+  # Evaluate already-running resources in the background too, so Audit-mode
+  # PolicyReports cover the existing platform pods, not just new admissions.
+  background: true
+  rules:
+    # --- Rule 1: MUTATE — inject safe securityContext defaults ONLY when omitted.
+    # The +(...) "add anchor" means "add this key if absent; never overwrite an
+    # explicit value." So a workload that simply forgot runAsNonRoot/seccomp gets
+    # a safe default; a workload that explicitly set something dangerous is left
+    # untouched here and caught by the validate rule instead (spec §1.1).
+    - name: default-secure-securitycontext
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+      exclude:
+        any:
+          - resources:
+              namespaces:
+                # DOKS-managed system components (Cilium CNI, CSI, coredns,
+                # konnectivity...) legitimately need root/host access and are
+                # not ours to modify. This is POL-02's "Cilium/CNI" named
+                # exception (spec §POL-02), expressed as the namespace DOKS
+                # runs them in. Never mutate these.
+                - kube-system
+      mutate:
+        patchStrategicMerge:
+          spec:
+            securityContext:
+              +(runAsNonRoot): true
+              +(seccompProfile):
+                +(type): RuntimeDefault
+    # --- Rule 2: VALIDATE — enforce the whole 'restricted' profile in one
+    # declarative block (Kyverno's native podSecurity subrule). Covers
+    # privileged, host namespaces, hostPath, allowPrivilegeEscalation,
+    # capabilities, runAsNonRoot, seccomp, etc. runAsUser is deliberately NOT
+    # asserted here beyond "not zero" — restricted requires no specific UID
+    # (spec v1.1). failureAction: Audit = report violations, block nothing yet.
+    - name: restricted-profile
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+      exclude:
+        any:
+          - resources:
+              namespaces:
+                - kube-system
+      validate:
+        failureAction: Audit
+        podSecurity:
+          level: restricted
+          version: latest
