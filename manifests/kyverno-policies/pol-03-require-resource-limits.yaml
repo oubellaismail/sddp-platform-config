@@ -1,0 +1,80 @@
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: pol-03-require-resource-limits
+  annotations:
+    policies.kyverno.io/title: "POL-03 — Require resource limits"
+    policies.kyverno.io/category: "Resource governance"
+    policies.kyverno.io/description: >-
+      Every container must declare a CPU request, a memory request, and a
+      memory limit, within the platform's approved size tiers. Mutates the
+      'small' tier into omitted fields; validates presence + the 'large'
+      tier ceiling. A CPU limit is permitted but not required (spec v1.2:
+      CPU is compressible, a CPU limit only throttles). Maps to POL-SDDP-001
+      POL-03. Currently Audit mode pending ArgoCD gaining explicit resources
+      (tracked as a dependency before flipping to Enforce).
+spec:
+  # Scan existing resources too, so Audit-mode PolicyReports cover the pods
+  # already running (this is how we'll see which platform pods lack limits).
+  background: true
+  rules:
+    # --- Rule 1: MUTATE — inject the 'small' tier ONLY into omitted fields.
+    # (name): "?*" applies the patch to every container; the +(...) add-anchors
+    # add a field only when absent, never overwriting an explicit value. So a
+    # container that set nothing gets small defaults; one that set medium/large
+    # values keeps them (and is checked by rule 2 against the ceiling).
+    - name: default-resources-small-tier
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+      exclude:
+        any:
+          - resources:
+              namespaces:
+                # DOKS-managed system components — not ours to modify, same
+                # boundary excluded in POL-02.
+                - kube-system
+      mutate:
+        patchStrategicMerge:
+          spec:
+            containers:
+              - (name): "?*"
+                resources:
+                  requests:
+                    +(cpu): 100m
+                    +(memory): 128Mi
+                  limits:
+                    +(memory): 256Mi
+    # --- Rule 2: VALIDATE — require the three fields AND enforce the 'large'
+    # tier ceiling. In a Kyverno pattern, a field written with an operator
+    # (e.g. "<=500m") is BOTH required-to-be-present AND bounded — so this one
+    # block enforces presence and the "can't claim a whole node" ceiling at
+    # once. failureAction: Audit = report only, block nothing yet.
+    - name: require-resources-within-large-tier
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+      exclude:
+        any:
+          - resources:
+              namespaces:
+                - kube-system
+      validate:
+        failureAction: Audit
+        message: >-
+          Every container must set a CPU request, memory request, and memory
+          limit, and stay within the large tier ceiling (cpu request <=500m,
+          memory request <=512Mi, memory limit <=1Gi). See POL-SDDP-001 POL-03.
+        pattern:
+          spec:
+            containers:
+              - resources:
+                  requests:
+                    cpu: "<=500m"
+                    memory: "<=512Mi"
+                  limits:
+                    memory: "<=1Gi"
