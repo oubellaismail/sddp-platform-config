@@ -1,0 +1,107 @@
+# POL-05 — Require network policy (spec: kyverno-policy-spec.md §POL-05).
+#
+# Unlike POL-02/03 (which inspect the content of a single Pod), this is a
+# namespace-level AGGREGATE check: on Pod admission an apiCall lists the
+# NetworkPolicy objects in the Pod's namespace and denies if there are none.
+# It forces every application namespace to STATE its traffic isolation in Git
+# rather than silently inheriting the cluster default.
+#
+# Existence, not shape: we count NetworkPolicies, we do NOT check that any of
+# them actually selects this Pod or is restrictive — that is deliberately out
+# of scope for the POC (spec §POL-05 "Known limitation" + §6). Cilium's
+# cluster-wide default-deny is the structural floor that makes the unchecked
+# shape safe; this policy is the declarative "you must have declared intent"
+# backstop on top of it.
+---
+# --- RBAC: let Kyverno's controllers read NetworkPolicy objects.
+# The apiCall below reads networkpolicies, which Kyverno's shipped roles do
+# NOT grant. We add a NEW ClusterRole (never patch Kyverno's own roles —
+# upgrade-safe, per Kyverno docs) and aggregate it into all three controllers
+# via Kyverno's aggregation labels. Without this the apiCall errors and,
+# because the policy is fail-closed, EVERY Pod admission in a matched namespace
+# would be blocked. Verify it took effect with:
+#   kubectl auth can-i list networkpolicies \
+#     --as=system:serviceaccount:kyverno:kyverno-admission-controller -A
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: kyverno:apicall-list-networkpolicies
+  labels:
+    rbac.kyverno.io/aggregate-to-admission-controller: "true"   # admission-time eval
+    rbac.kyverno.io/aggregate-to-background-controller: "true"  # background scans
+    rbac.kyverno.io/aggregate-to-reports-controller: "true"     # PolicyReports
+rules:
+  - apiGroups: ["networking.k8s.io"]
+    resources: ["networkpolicies"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: pol-05-require-networkpolicy
+  annotations:
+    policies.kyverno.io/title: "POL-05 — Require network policy"
+    policies.kyverno.io/category: "Network isolation"
+    policies.kyverno.io/description: >-
+      Every application namespace that hosts workloads must declare at least
+      one NetworkPolicy. On Pod admission an apiCall counts the NetworkPolicy
+      objects in the Pod's namespace and denies when there are none, forcing
+      teams to state their traffic requirements in Git rather than silently
+      inheriting the cluster default. Existence check only: verifies a
+      NetworkPolicy is present, NOT that it is restrictive (spec §POL-05 known
+      limitation) — Cilium's cluster-wide default-deny is the structural floor.
+      Validating only (spec: no safe default to mutate in). Maps to
+      POL-SDDP-001 POL-05. Enforce mode (fail-closed, spec §1.2): rolled out
+      Audit-first, then flipped.
+spec:
+  # Scan existing resources too, so Audit-mode PolicyReports cover pods already
+  # running. All current pods are in excluded system namespaces, so this is
+  # expected to surface nothing — kept on for consistency with POL-02/03 and so
+  # the first real app namespace is covered by background reports immediately.
+  background: true
+  rules:
+    # --- VALIDATE — deny a Pod whose namespace holds zero NetworkPolicies.
+    - name: require-networkpolicy-in-namespace
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+      exclude:
+        any:
+          - resources:
+              # Scope = application namespaces (spec §POL-05). Exclude the
+              # platform/system namespaces: Kubernetes built-ins, DOKS-managed
+              # (kube-system), and our own tooling (argocd, kyverno). None of
+              # these are application namespaces, so none is required to carry a
+              # NetworkPolicy here. When Cilium/Falco land they are the spec's
+              # named §1.4 exceptions and would be added to this list.
+              namespaces:
+                - kube-system
+                - kube-public
+                - kube-node-lease
+                - argocd
+                - kyverno
+      context:
+        # List the NetworkPolicy objects in THIS pod's namespace and reduce to
+        # a count. Deliberately NO label_match against the pod's selector: that
+        # would be shape-checking (does a netpol actually cover this pod), which
+        # the spec puts out of scope for the POC. Existence is the whole check.
+        - name: networkpolicy_count
+          apiCall:
+            urlPath: "/apis/networking.k8s.io/v1/namespaces/{{request.namespace}}/networkpolicies"
+            jmesPath: "items | length(@)"
+      validate:
+        # Audit first (non-blocking rollout); flip to Enforce once the reject
+        # and allow paths are smoke-tested — same discipline as POL-02/03.
+        failureAction: Audit
+        message: >-
+          Namespace '{{ request.namespace }}' has no NetworkPolicy. Every
+          application namespace must declare at least one NetworkPolicy to
+          state its traffic isolation in Git. See POL-SDDP-001 POL-05.
+        deny:
+          conditions:
+            all:
+              - key: "{{ networkpolicy_count }}"
+                operator: Equals
+                value: 0
