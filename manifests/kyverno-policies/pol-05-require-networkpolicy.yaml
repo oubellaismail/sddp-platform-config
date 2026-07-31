@@ -92,9 +92,10 @@ spec:
             urlPath: "/apis/networking.k8s.io/v1/namespaces/{{request.namespace}}/networkpolicies"
             jmesPath: "items | length(@)"
       validate:
-        # Audit first (non-blocking rollout); flip to Enforce once the reject
-        # and allow paths are smoke-tested — same discipline as POL-02/03.
-        failureAction: Audit
+        # Audited first (non-blocking): confirmed POL-02/03 admit a compliant
+        # probe pod and POL-05 flags a netpol-less namespace in PolicyReports,
+        # then flipped to Enforce — same rollout discipline as POL-02/03.
+        failureAction: Enforce
         message: >-
           Namespace '{{ request.namespace }}' has no NetworkPolicy. Every
           application namespace must declare at least one NetworkPolicy to
