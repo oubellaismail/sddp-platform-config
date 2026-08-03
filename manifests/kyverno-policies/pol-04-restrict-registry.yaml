@@ -1,0 +1,89 @@
+# POL-04 — Restrict to trusted registry / DOCR-only (spec: kyverno-policy-spec.md §POL-04).
+#
+# The "location" marker of a promoted artifact (ADR-008, two-marker model).
+# Application images may be pulled ONLY from the production registry of record,
+# DOCR (registry.digitalocean.com/sddp-registry/...). Because DOCR receives a
+# digest only AFTER it has been signed and promoted (pipeline §3.11b), pinning
+# pulls to DOCR makes an unsigned/staging image not merely unverified but
+# UNPULLABLE — a staging/prod separation that holds even if POL-01 signature
+# verification is misconfigured or bypassed. POL-01 protects the *content*;
+# POL-04 protects the *source*.
+#
+# Validating only (spec §POL-04 "Mode rationale"): there is no safe default
+# registry to substitute, so an untrusted origin is always a rejection — no
+# mutate. This checks the registry/repository PREFIX of every image reference;
+# POL-01's signature check is the complementary content check.
+#
+# Allowlist = DOCR only, for now. The stock Postgres `db` tier is a non-DOCR
+# entry the spec requires (named + digest-pinned), but the db tier does not yet
+# exist (sddp-app-config is Week-4 work and has not chosen its Postgres image).
+# Rather than guess a digest, the db entry is DEFERRED: fail-closed means a db
+# image with no allowlist entry is correctly rejected until sddp-app-config pins
+# it, forcing that decision at the right moment. GHCR (staging) is deliberately
+# NEVER in the allowlist.
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: pol-04-restrict-registry
+  annotations:
+    policies.kyverno.io/title: "POL-04 — Restrict to trusted registry (DOCR-only)"
+    policies.kyverno.io/category: "Artifact origin"
+    policies.kyverno.io/description: >-
+      Application-namespace images must originate only from the production
+      registry of record, DOCR (registry.digitalocean.com/sddp-registry). The
+      staging registry (GHCR) is deliberately excluded, so an unsigned/staging
+      image is structurally unpullable independent of POL-01 (ADR-008 two-marker
+      model). Validating only (spec §POL-04: no safe default to substitute).
+      Maps to POL-SDDP-001 POL-04. Enforce mode (fail-closed, spec §1.2): rolled
+      out Audit-first, then flipped. Allowlist is DOCR-only for now; the stock
+      Postgres db's digest-pinned entry is deferred to Week-4 sddp-app-config.
+spec:
+  # Scan existing resources too, so Audit-mode PolicyReports cover pods already
+  # running. All current pods are in excluded system namespaces, so this is
+  # expected to surface nothing — kept on for consistency with POL-02/03/05.
+  background: true
+  rules:
+    # --- VALIDATE — every image in an application namespace must match the
+    # DOCR allowlist prefix. The pattern applies to EACH element of the
+    # container arrays; a single non-matching image fails the pod. `containers`
+    # is always present so needs no anchor; init/ephemeral are optional, so the
+    # =(...) conditional anchor means "validate only if the key is present."
+    - name: validate-registry-docr-only
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+      exclude:
+        any:
+          - resources:
+              # Scope = application namespaces (spec §POL-04 "Scope"). Exclude
+              # the platform/system namespaces — Kubernetes built-ins, DOKS-
+              # managed (kube-system), and our own tooling (argocd, kyverno) —
+              # which pull from their own vendors' registries and are governed
+              # by the separate platform allowlist, not this DOCR restriction.
+              # Same named-exception model as POL-02/03/05 (spec §1.4).
+              namespaces:
+                - kube-system
+                - kube-public
+                - kube-node-lease
+                - argocd
+                - kyverno
+      validate:
+        # Rollout: Audit first (non-blocking) to confirm PolicyReports flag
+        # nothing unexpected, then flip this to Enforce — same fail-closed
+        # discipline as POL-02/03/05 (spec §1.2).
+        failureAction: Audit
+        message: >-
+          Image origin not permitted. Application-namespace images must be
+          pulled from the production registry of record, DOCR
+          (registry.digitalocean.com/sddp-registry/...). Staging (GHCR) and
+          arbitrary registries are rejected. See POL-SDDP-001 POL-04.
+        pattern:
+          spec:
+            =(ephemeralContainers):
+              - image: "registry.digitalocean.com/sddp-registry/*"
+            =(initContainers):
+              - image: "registry.digitalocean.com/sddp-registry/*"
+            containers:
+              - image: "registry.digitalocean.com/sddp-registry/*"
