@@ -70,10 +70,10 @@ spec:
                 - argocd
                 - kyverno
       validate:
-        # Rollout: Audit first (non-blocking) to confirm PolicyReports flag
-        # nothing unexpected, then flip this to Enforce — same fail-closed
-        # discipline as POL-02/03/05 (spec §1.2).
-        failureAction: Audit
+        # Rolled out Audit-first (PolicyReports flagged nothing — no app-namespace
+        # workloads yet), then flipped to Enforce — same fail-closed discipline as
+        # POL-02/03/05 (spec §1.2).
+        failureAction: Enforce
         message: >-
           Image origin not permitted. Application-namespace images must be
           pulled from the production registry of record, DOCR
