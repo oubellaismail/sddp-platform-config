@@ -1,0 +1,104 @@
+# POL-01 — Verify image signatures / keyless Cosign (spec: kyverno-policy-spec.md §POL-01).
+#
+# The "content" marker of a promoted artifact (ADR-008, two-marker model) and the
+# platform's single most important policy: first-party application images must
+# carry a valid KEYLESS Cosign signature produced by the CI release workflow. It
+# enforces artifact integrity, the promotion boundary (unsigned = unpromoted =
+# cannot run), and the control-plane backstop — a malicious manifest can *declare*
+# an unsigned image but cannot *forge* its signature. POL-01 verifies the content;
+# POL-04 (DOCR-only) verifies the source; together they are the two markers.
+#
+# Signature storage / referrers (the APP-005 open thread, RESOLVED here). The CI
+# signs with cosign v4, which stores the signature + SBOM attestation as OCI 1.1
+# REFERRERS in the modern Sigstore-bundle format (application/vnd.dev.sigstore.
+# bundle.v0.3+json), copied into DOCR via `oras cp -r`. DOCR has no native OCI
+# Referrers API (it uses the fallback `sha256-<digest>` index tag), which made the
+# OLD cosign CLI hang. Kyverno v1.18.1 resolves it cleanly PROVIDED we tell it the
+# format: `type: SigstoreBundle` (the default `Cosign` type hunts for the legacy
+# `.sig` tag, which does not exist). Verified end-to-end against the real DOCR
+# image — no change to release.yml was needed.
+#
+# Credentials (the REAL POL-01 gotcha). Kyverno fetches the signature bundles from
+# DOCR ITSELF at admission, from its own controller pod — the kubelet's registry-
+# integration pull secret does NOT cover this (different subsystem, different
+# namespace, and admission happens before any pod/node exists). DOCR is private,
+# so without its own credential Kyverno gets 401. `imageRegistryCredentials.secrets`
+# points at a docker-registry secret `docr-read` in the kyverno namespace, holding
+# a DOCR read token. That secret is provisioned IMPERATIVELY (it can't live in git
+# plaintext) and re-created after any cluster recreate — see the platform-config
+# README; Week-6 External Secrets + Vault will adopt it.
+#
+# Scope. imageReferences is scoped to the FIRST-PARTY set (sddp-*) so POL-01 never
+# matches the stock Postgres db (signed, if at all, by its own vendor, not our CI).
+# The db is governed by POL-04's allowlist instead. Net model: DOCR images must be
+# signed (POL-01) AND only DOCR may be pulled (POL-04). Keyless per ADR-006.
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: pol-01-verify-signature
+  annotations:
+    policies.kyverno.io/title: "POL-01 — Verify image signatures (keyless)"
+    policies.kyverno.io/category: "Artifact provenance"
+    policies.kyverno.io/description: >-
+      First-party application images (registry.digitalocean.com/sddp-registry/
+      sddp-*) must carry a valid keyless Cosign signature from the CI release
+      workflow's pinned OIDC identity. Signatures are verified from DOCR at
+      admission using the modern Sigstore-bundle format (type: SigstoreBundle);
+      Kyverno authenticates to private DOCR via the docr-read secret in the
+      kyverno namespace. The stock db is out of scope (not matched by sddp-*),
+      governed by POL-04. Keyless per ADR-006; two-marker model per ADR-008.
+      Maps to POL-SDDP-001 POL-01. Fail-closed (spec §1.2): rolled out Audit-
+      first, then flipped to Enforce.
+spec:
+  # Image verification is an admission-time act (fetch bundle, verify identity,
+  # mutate tag->digest); it does not run as a background scan, so background is
+  # off — unlike the content/aggregate policies POL-02/03/04/05.
+  background: false
+  rules:
+    - name: verify-first-party-signature
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+      exclude:
+        any:
+          - resources:
+              # Scope = application namespaces (spec §POL-01). System namespaces
+              # run third-party components signed (or not) by their own vendors,
+              # not verifiable against our identity — same named-exception model
+              # as POL-02/03/04/05 (spec §1.4).
+              namespaces:
+                - kube-system
+                - kube-public
+                - kube-node-lease
+                - argocd
+                - kyverno
+      verifyImages:
+        - imageReferences:
+            # FIRST-PARTY ONLY. Must NOT match the stock Postgres db — that is
+            # POL-04's job. A broader pattern here would reject the db.
+            - "registry.digitalocean.com/sddp-registry/sddp-*"
+          type: SigstoreBundle       # our sigs are Sigstore bundles, not legacy .sig tags
+          required: true             # an unsigned matching image is a rejection
+          mutateDigest: true         # pin tag -> verified digest on admission
+          verifyDigest: true         # images must be digest-referenceable (ADR-004)
+          # Rolled out Audit-first (confirm the signed image passes), then flipped
+          # to Enforce — same fail-closed discipline as POL-02/03/04/05 (spec §1.2).
+          failureAction: Audit
+          imageRegistryCredentials:
+            # docr-read: docker-registry secret in the kyverno namespace holding a
+            # DOCR read token. Imperative + documented (README); not in git.
+            secrets:
+              - docr-read
+          attestors:
+            - count: 1
+              entries:
+                # Keyless (Sigstore), ADR-006. Pinned EXACTLY to the CI release
+                # workflow's OIDC identity — a loose subject (any workflow/repo)
+                # would silently accept unintended signers (spec: critical config).
+                - keyless:
+                    issuer: "https://token.actions.githubusercontent.com"
+                    subject: "https://github.com/oubellaismail/sddp-app/.github/workflows/release.yml@refs/heads/main"
+                    rekor:
+                      url: "https://rekor.sigstore.dev"
