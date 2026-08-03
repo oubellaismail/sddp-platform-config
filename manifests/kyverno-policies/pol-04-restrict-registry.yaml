@@ -14,13 +14,12 @@
 # mutate. This checks the registry/repository PREFIX of every image reference;
 # POL-01's signature check is the complementary content check.
 #
-# Allowlist = DOCR only, for now. The stock Postgres `db` tier is a non-DOCR
-# entry the spec requires (named + digest-pinned), but the db tier does not yet
-# exist (sddp-app-config is Week-4 work and has not chosen its Postgres image).
-# Rather than guess a digest, the db entry is DEFERRED: fail-closed means a db
-# image with no allowlist entry is correctly rejected until sddp-app-config pins
-# it, forcing that decision at the right moment. GHCR (staging) is deliberately
-# NEVER in the allowlist.
+# Allowlist = DOCR + one named, digest-pinned non-DOCR entry: the stock Postgres
+# `db` tier (cgr.dev/chainguard/postgres, chosen non-root/zero-CVE so it also
+# satisfies POL-02). This is the spec's single deliberate upstream exception —
+# pinned by digest via `|` alternation, never a broad wildcard. GHCR (staging)
+# is deliberately NEVER in the allowlist. Any further upstream must be added here
+# explicitly, by digest.
 apiVersion: kyverno.io/v1
 kind: ClusterPolicy
 metadata:
@@ -82,8 +81,8 @@ spec:
         pattern:
           spec:
             =(ephemeralContainers):
-              - image: "registry.digitalocean.com/sddp-registry/*"
+              - image: "registry.digitalocean.com/sddp-registry/* | cgr.dev/chainguard/postgres@sha256:0e79ed78ea7dafe83f0927da91a08353433c73699ece8446187f16e04f8a46a3"
             =(initContainers):
-              - image: "registry.digitalocean.com/sddp-registry/*"
+              - image: "registry.digitalocean.com/sddp-registry/* | cgr.dev/chainguard/postgres@sha256:0e79ed78ea7dafe83f0927da91a08353433c73699ece8446187f16e04f8a46a3"
             containers:
-              - image: "registry.digitalocean.com/sddp-registry/*"
+              - image: "registry.digitalocean.com/sddp-registry/* | cgr.dev/chainguard/postgres@sha256:0e79ed78ea7dafe83f0927da91a08353433c73699ece8446187f16e04f8a46a3"
