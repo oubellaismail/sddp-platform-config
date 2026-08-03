@@ -1,0 +1,63 @@
+# GitOps delivery of the sample application (sddp-app), backend tier first.
+# Discovered by the root app-of-apps (which recurses apps/). Two resources:
+#   1. AppProject — scopes ArgoCD's authority for this app (ADR-001 / cluster-
+#      architecture-spec §6.2): it may pull ONLY from sddp-app-config and deploy
+#      ONLY into the sddp-app namespace, never platform namespaces or another
+#      project. This is ArgoCD least-privilege made concrete on the first real
+#      tenant app.
+#   2. Application — the actual delivery, pointed at sddp-app-config/manifests.
+---
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: sddp-app
+  namespace: argocd
+  annotations:
+    # Create the project before the Application that references it.
+    argocd.argoproj.io/sync-wave: "-1"
+spec:
+  description: "Sample application (sddp-app) — per-project ArgoCD scope"
+  # Only this repo may be a source for anything in this project.
+  sourceRepos:
+    - git@github.com:oubellaismail/sddp-app-config.git
+  # Namespaced resources may land ONLY in the sddp-app namespace.
+  destinations:
+    - server: https://kubernetes.default.svc
+      namespace: sddp-app
+  # Cluster-scoped resources: only Namespace (so the app can bootstrap its own
+  # namespace via CreateNamespace). It cannot manage CRDs, ClusterRoles, admission
+  # webhooks, etc. — those stay platform-owned. Tradeoff noted: this technically
+  # permits creating other namespaces; the destinations list is what confines the
+  # actual workloads to sddp-app.
+  clusterResourceWhitelist:
+    - group: ""
+      kind: Namespace
+  # All namespaced kinds are allowed (within the destination namespace only).
+  namespaceResourceWhitelist:
+    - group: "*"
+      kind: "*"
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: sddp-app
+  namespace: argocd
+spec:
+  project: sddp-app
+  source:
+    # SSH form — must match the argocd-app-config-creds Secret url EXACTLY, or
+    # ArgoCD can't match the deploy-key credential to this repo (INFRA-005 lesson).
+    repoURL: git@github.com:oubellaismail/sddp-app-config.git
+    targetRevision: main
+    path: manifests
+    directory:
+      recurse: true   # picks up backend/ now, frontend/ + db/ when added later
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: sddp-app
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
