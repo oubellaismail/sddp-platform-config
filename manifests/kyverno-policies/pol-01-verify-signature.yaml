@@ -88,8 +88,8 @@ spec:
           # mutation contradicts audit-only), so the two flip together — Audit
           # pairs with mutateDigest:false; Enforce pairs with mutateDigest:true
           # (pin tag -> verified digest on admission).
-          failureAction: Audit
-          mutateDigest: false
+          failureAction: Enforce
+          mutateDigest: true
           imageRegistryCredentials:
             # docr-read: docker-registry secret in the kyverno namespace holding a
             # DOCR read token. Imperative + documented (README); not in git.
