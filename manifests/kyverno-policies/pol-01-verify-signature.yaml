@@ -41,8 +41,9 @@ metadata:
     policies.kyverno.io/category: "Artifact provenance"
     policies.kyverno.io/description: >-
       First-party application images (registry.digitalocean.com/sddp-registry/
-      sddp-*) must carry a valid keyless Cosign signature from the CI release
-      workflow's pinned OIDC identity. Signatures are verified from DOCR at
+      sddp-*) must carry a valid keyless Cosign signature from one of the trusted
+      first-party service repos' pinned OIDC release identities (explicit
+      allowlist — sddp-app, sddp-frontend). Signatures are verified from DOCR at
       admission using the modern Sigstore-bundle format (type: SigstoreBundle);
       Kyverno authenticates to private DOCR via the docr-read secret in the
       kyverno namespace. The stock db is out of scope (not matched by sddp-*),
@@ -96,13 +97,26 @@ spec:
             secrets:
               - docr-read
           attestors:
+            # MULTI-SIGNER EXPLICIT ALLOWLIST (PCFG-008, ADR-009). One attestor set
+            # with count:1 over N keyless entries means "signed by AT LEAST ONE
+            # trusted first-party signer" (OR across the entries). Each first-party
+            # service repo is ONE exact entry, so onboarding a service = adding one
+            # entry here — a deliberate, auditable trust act, and this list IS the
+            # record of who may sign for the cluster. Subjects are pinned EXACTLY
+            # (issuer + full workflow ref @refs/heads/main); a loose subjectRegExp
+            # (e.g. any repo/branch, or sddp-*) would silently accept unintended
+            # signers and is rejected (ADR-006, spec: critical config).
             - count: 1
               entries:
-                # Keyless (Sigstore), ADR-006. Pinned EXACTLY to the CI release
-                # workflow's OIDC identity — a loose subject (any workflow/repo)
-                # would silently accept unintended signers (spec: critical config).
+                # sddp-app — backend service (the original signer, PCFG-006).
                 - keyless:
                     issuer: "https://token.actions.githubusercontent.com"
                     subject: "https://github.com/oubellaismail/sddp-app/.github/workflows/release.yml@refs/heads/main"
+                    rekor:
+                      url: "https://rekor.sigstore.dev"
+                # sddp-frontend — frontend service, its own repo + identity (APP-008).
+                - keyless:
+                    issuer: "https://token.actions.githubusercontent.com"
+                    subject: "https://github.com/oubellaismail/sddp-frontend/.github/workflows/release.yml@refs/heads/main"
                     rekor:
                       url: "https://rekor.sigstore.dev"
