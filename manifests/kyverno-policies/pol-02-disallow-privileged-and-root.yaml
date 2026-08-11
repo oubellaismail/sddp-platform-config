@@ -38,6 +38,11 @@ spec:
                 # exception (spec §POL-02), expressed as the namespace DOKS
                 # runs them in. Never mutate these.
                 - kube-system
+                # platform-falco: Falco's eBPF DaemonSet runs privileged as root
+                # (its named exception, Falco spec §3). Excluded from the mutate
+                # rule too so its explicit root securityContext is not overwritten
+                # by the runAsNonRoot default.
+                - platform-falco
       mutate:
         patchStrategicMerge:
           spec:
@@ -62,6 +67,10 @@ spec:
           - resources:
               namespaces:
                 - kube-system
+                # Falco's eBPF DaemonSet is genuinely privileged and root — it
+                # cannot satisfy the restricted profile (its named exception,
+                # Falco spec §3). The detective layer is itself trusted platform.
+                - platform-falco
       validate:
         failureAction: Enforce
         podSecurity:

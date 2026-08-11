@@ -82,6 +82,10 @@ spec:
                 - kube-node-lease
                 - argocd
                 - kyverno
+                # Falco has landed (this comment's anticipated §1.4 exception):
+                # its DaemonSet uses host networking, so a NetworkPolicy would
+                # not govern it anyway. Cilium will follow.
+                - platform-falco
       context:
         # List the NetworkPolicy objects in THIS pod's namespace and reduce to
         # a count. Deliberately NO label_match against the pod's selector: that

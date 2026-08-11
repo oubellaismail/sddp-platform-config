@@ -1,0 +1,254 @@
+# Falco — eBPF runtime detection (FALCO-SDDP-001, R-01..R-08).
+#
+# The DETECTIVE backstop behind the enforcing Kyverno gate: Kyverno stops bad
+# things at admission (preventive); Falco catches malicious behaviour after a
+# pod is admitted (detective) — it cannot block a syscall, only surface it fast
+# (spec §6). Delivered like the kyverno engine app: a Helm-source ArgoCD
+# Application, here into a dedicated platform-falco namespace.
+#
+# platform-falco is a named exception in POL-02 (privileged DaemonSet), POL-04
+# (pulls from docker.io/falcosecurity, not DOCR) and POL-05 (host networking) —
+# it stays UNDER POL-03, so every container below declares resource limits.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: falco
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://falcosecurity.github.io/charts
+    chart: falco
+    # Pinned from `helm search repo falcosecurity/falco --versions` (app v0.44.1).
+    targetRevision: 9.1.0
+    helm:
+      valuesObject:
+        # Modern eBPF probe — no kernel-module build, no driver-loader init.
+        # Token confirmed against chart 9.1.0 (`helm show values`): the two
+        # options are `kmod` and `modern_ebpf`.
+        driver:
+          kind: modern_ebpf
+
+        # POL-03: the main Falco container. eBPF capture on every node — bounded
+        # on purpose (recall the ArgoCD controller OOMKill at 512Mi).
+        resources:
+          requests:
+            cpu: 100m
+            memory: 512Mi
+          limits:
+            cpu: "1"
+            memory: 1Gi
+
+        falco:
+          # JSON so both `kubectl logs` and Falcosidekick get structured events.
+          json_output: true
+          json_include_output_property: true
+          json_include_tags_property: true
+
+        # POL-03: falcoctl sidecars (rule/artifact fetch) also need limits.
+        falcoctl:
+          artifact:
+            install:
+              resources:
+                requests: {cpu: 50m, memory: 64Mi}
+                limits: {cpu: 200m, memory: 128Mi}
+            follow:
+              resources:
+                requests: {cpu: 50m, memory: 64Mi}
+                limits: {cpu: 200m, memory: 128Mi}
+
+        # Falcosidekick: stood up now, minimal, NO external sink wired yet. This
+        # is the Week-7 seam — the alerting pipeline (Loki/Alertmanager) becomes
+        # a pure config change here. Enabling it auto-wires Falco's http_output.
+        # webui is left off to stay minimal (it drags in a redis dependency);
+        # flip it on in Week-7 for the demo.
+        falcosidekick:
+          enabled: true
+          resources:
+            requests: {cpu: 50m, memory: 64Mi}
+            limits: {cpu: 200m, memory: 128Mi}
+          webui:
+            enabled: false
+
+        # ---- R-01..R-08. Mounted as an extra rules file ON TOP of the upstream
+        # default ruleset (so built-in macros spawned_process/open_read/
+        # open_write/outbound/container are available). Severity→priority:
+        # Critical=CRITICAL (R-01..04), High=ERROR (R-05,06), Medium=WARNING
+        # (R-07,08); the human severity is also echoed in each output string.
+        customRules:
+          sddp-rules.yaml: |-
+            # SDDP runtime detection R-01..R-08 (FALCO-SDDP-001). Detective only.
+
+            #############
+            # 1. Scoping — mirror POL-02/04/05's named-exception model
+            #############
+            - list: sddp_platform_namespaces
+              items: [platform-falco, platform-cilium, kyverno, argocd, kube-system, kube-public, kube-node-lease]
+
+            - macro: platform_ns
+              condition: (k8s.ns.name in (sddp_platform_namespaces))
+
+            # "an application container": in a container AND not a platform ns.
+            # k8s.ns.name comes from pod-sandbox labels (CRI); no API client.
+            - macro: app_container
+              condition: (container and not platform_ns)
+
+            #############
+            # 2. Helper lists
+            #############
+            - list: sddp_shell_binaries
+              items: [bash, sh, zsh, ash, dash, csh, ksh, tcsh, busybox]
+
+            - list: sddp_container_runtime_sockets
+              items: [/var/run/docker.sock, /run/docker.sock, /var/run/containerd/containerd.sock,
+                      /run/containerd/containerd.sock, /var/run/crio/crio.sock, /run/crio/crio.sock]
+
+            - list: sddp_kmod_binaries
+              items: [insmod, modprobe, rmmod, kmod]
+
+            # ---- cluster-specific network inputs (DOKS sddp-poc, fra1) ----
+            - list: sddp_cluster_cidrs           # DOKS pod + service subnets (doctl cluster get)
+              items: ['"10.115.0.0/16"', '"10.114.32.0/19"']
+            - list: sddp_kube_dns_ips            # CoreDNS ClusterIP (kube-system/kube-dns)
+              items: ['"10.114.32.10"']
+            - list: sddp_expected_internal_ips   # the declared communication graph, as ClusterIPs
+              # frontend / backend / db (sddp-app) + CoreDNS. Re-fetch after any
+              # `terraform destroy`/recreate — ClusterIPs are reassigned.
+              items: ['"10.114.60.254"', '"10.114.53.81"', '"10.114.33.198"', '"10.114.32.10"']
+            - list: sddp_egress_allowlist_ips    # named egress allowlist (Cluster Arch §7.3)
+              items: []                                            # FILL when the allowlist is defined (with Cilium)
+
+            #############
+            # 3. Rules
+            #############
+
+            # ---- R-01  Interactive shell in an app container  (Critical / TH-16) ----
+            - rule: SDDP R-01 Interactive shell in application container
+              desc: An interactive shell was spawned inside an application container.
+              condition: >
+                spawned_process and app_container
+                and proc.name in (sddp_shell_binaries)
+                and proc.tty != 0
+              output: >
+                R-01 CRITICAL interactive shell in app container
+                (ns=%k8s.ns.name pod=%k8s.pod.name container=%container.name shell=%proc.name
+                 parent=%proc.pname cmdline=%proc.cmdline user=%user.name)
+              priority: CRITICAL
+              tags: [sddp, R-01, TH-16, severity_critical, shell]
+
+            # ---- R-02  Container runtime socket access  (Critical / TH-16) ----
+            - rule: SDDP R-02 Container runtime socket access
+              desc: A process in an application container accessed the container runtime socket.
+              condition: >
+                (open_read or open_write) and app_container
+                and fd.name in (sddp_container_runtime_sockets)
+              output: >
+                R-02 CRITICAL runtime socket access
+                (ns=%k8s.ns.name pod=%k8s.pod.name container=%container.name file=%fd.name
+                 proc=%proc.name cmdline=%proc.cmdline user=%user.name)
+              priority: CRITICAL
+              tags: [sddp, R-02, TH-16, severity_critical, escape]
+
+            # ---- R-03  Sensitive host path write  (Critical / TH-16) ----
+            - macro: sddp_sensitive_host_paths
+              condition: >
+                (fd.name startswith /sys/ or fd.name startswith /proc/sys/
+                 or fd.name startswith /proc/sysrq-trigger or fd.name startswith /boot/
+                 or fd.name startswith /lib/modules/ or fd.name startswith /host)
+            - rule: SDDP R-03 Sensitive host path write attempt
+              desc: A write was attempted to a sensitive host path from an application container.
+              condition: open_write and app_container and sddp_sensitive_host_paths
+              output: >
+                R-03 CRITICAL sensitive host-path write
+                (ns=%k8s.ns.name pod=%k8s.pod.name container=%container.name file=%fd.name
+                 proc=%proc.name cmdline=%proc.cmdline user=%user.name)
+              priority: CRITICAL
+              tags: [sddp, R-03, TH-16, severity_critical, escape]
+
+            # ---- R-04  Kernel module load  (Critical / TH-16) ----
+            - rule: SDDP R-04 Kernel module load attempt in container
+              desc: A kernel module load was attempted from inside an application container.
+              condition: >
+                app_container
+                and (evt.type in (init_module, finit_module)
+                     or (spawned_process and proc.name in (sddp_kmod_binaries)))
+              output: >
+                R-04 CRITICAL kernel module load attempt
+                (ns=%k8s.ns.name pod=%k8s.pod.name container=%container.name syscall=%evt.type
+                 proc=%proc.name cmdline=%proc.cmdline user=%user.name)
+              priority: CRITICAL
+              tags: [sddp, R-04, TH-16, severity_critical, escape]
+
+            # ---- R-05  Unexpected ServiceAccount token read  (High / TH-27) ----
+            - macro: sddp_sa_token_path
+              condition: >
+                (fd.name startswith /var/run/secrets/kubernetes.io/serviceaccount
+                 or fd.name startswith /run/secrets/kubernetes.io/serviceaccount)
+            - rule: SDDP R-05 Unexpected ServiceAccount token read
+              desc: An application pod read its mounted ServiceAccount token (possible identity misuse).
+              condition: open_read and app_container and sddp_sa_token_path
+              output: >
+                R-05 HIGH serviceaccount token read
+                (ns=%k8s.ns.name pod=%k8s.pod.name container=%container.name file=%fd.name
+                 proc=%proc.name cmdline=%proc.cmdline user=%user.name)
+              priority: ERROR
+              tags: [sddp, R-05, TH-27, severity_high, identity]
+
+            # ---- R-06  Off-graph internal connection  (High / TH-27) ----
+            # Precise graph enforcement is Cilium; Falco records the
+            # attempt. Baseline: fire on internal connections to any ClusterIP
+            # NOT in the declared graph. Tune sddp_expected_internal_ips.
+            - macro: sddp_to_cluster_internal
+              condition: (fd.sip in (sddp_cluster_cidrs) or fd.snet in (sddp_cluster_cidrs))
+            - rule: SDDP R-06 Unexpected internal connection (off communication graph)
+              desc: An app pod initiated a cluster-internal connection outside its declared graph.
+              condition: >
+                outbound and app_container and sddp_to_cluster_internal
+                and not fd.sip in (sddp_expected_internal_ips)
+              output: >
+                R-06 HIGH off-graph internal connection attempt
+                (ns=%k8s.ns.name pod=%k8s.pod.name container=%container.name
+                 dest=%fd.sip:%fd.sport proto=%fd.l4proto proc=%proc.name)
+              priority: ERROR
+              tags: [sddp, R-06, TH-27, severity_high, lateral]
+
+            # ---- R-07  Non-allowlisted egress  (Medium / TH-34) ----
+            # Detective complement to Cilium default-deny egress (C-22). Baseline.
+            - rule: SDDP R-07 Egress to non-allowlisted destination
+              desc: An app pod attempted an outbound connection to an external, non-allowlisted destination.
+              condition: >
+                outbound and app_container
+                and not sddp_to_cluster_internal
+                and not fd.sip in (sddp_egress_allowlist_ips)
+                and fd.sip != "0.0.0.0"
+              output: >
+                R-07 MEDIUM non-allowlisted egress
+                (ns=%k8s.ns.name pod=%k8s.pod.name container=%container.name
+                 dest=%fd.sip:%fd.sport proto=%fd.l4proto proc=%proc.name)
+              priority: WARNING
+              tags: [sddp, R-07, TH-34, severity_medium, egress]
+
+            # ---- R-08  Anomalous DNS  (Medium / TH-34) ----
+            # Full tunnelling analysis (entropy/volume) deferred to the Week-7
+            # pipeline (spec §7). Baseline: an app pod bypassing CoreDNS.
+            - rule: SDDP R-08 DNS query to non-cluster resolver
+              desc: An app pod sent DNS (udp/53) to a resolver other than cluster DNS.
+              condition: >
+                outbound and app_container
+                and fd.l4proto = udp and fd.sport = 53
+                and not fd.sip in (sddp_kube_dns_ips)
+              output: >
+                R-08 MEDIUM DNS to non-cluster resolver
+                (ns=%k8s.ns.name pod=%k8s.pod.name container=%container.name
+                 resolver=%fd.sip proc=%proc.name query=%fd.name)
+              priority: WARNING
+              tags: [sddp, R-08, TH-34, severity_medium, dns]
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: platform-falco
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

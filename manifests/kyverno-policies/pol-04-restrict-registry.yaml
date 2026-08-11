@@ -68,6 +68,9 @@ spec:
                 - kube-node-lease
                 - argocd
                 - kyverno
+                # platform-falco: Falco + Falcosidekick pull from
+                # docker.io/falcosecurity, their own vendor registry — not DOCR.
+                - platform-falco
       validate:
         # Rolled out Audit-first (PolicyReports flagged nothing — no app-namespace
         # workloads yet), then flipped to Enforce — same fail-closed discipline as
