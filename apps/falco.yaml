@@ -29,15 +29,16 @@ spec:
         driver:
           kind: modern_ebpf
 
-        # POL-03: the main Falco container. eBPF capture on every node — bounded
-        # on purpose (recall the ArgoCD controller OOMKill at 512Mi).
+        # POL-03: the main Falco container. eBPF capture on every node —
+        # right-sized to what modern-eBPF Falco actually uses (~150-250Mi),
+        # bounded so it stays a good citizen on the shared nodes.
         resources:
           requests:
             cpu: 100m
-            memory: 512Mi
+            memory: 256Mi
           limits:
-            cpu: "1"
-            memory: 1Gi
+            cpu: 500m
+            memory: 512Mi
 
         falco:
           # JSON so both `kubectl logs` and Falcosidekick get structured events.
@@ -114,7 +115,7 @@ spec:
             - list: sddp_expected_internal_ips   # the declared communication graph, as ClusterIPs
               # frontend / backend / db (sddp-app) + CoreDNS. Re-fetch after any
               # `terraform destroy`/recreate — ClusterIPs are reassigned.
-              items: ['"10.114.60.254"', '"10.114.53.81"', '"10.114.33.198"', '"10.114.32.10"']
+              items: ['"10.114.62.58"', '"10.114.57.28"', '"10.114.38.103"', '"10.114.32.10"']
             - list: sddp_egress_allowlist_ips    # named egress allowlist (Cluster Arch §7.3)
               items: []                                            # FILL when the allowlist is defined (with Cilium)
 
@@ -198,8 +199,11 @@ spec:
             # Precise graph enforcement is Cilium; Falco records the
             # attempt. Baseline: fire on internal connections to any ClusterIP
             # NOT in the declared graph. Tune sddp_expected_internal_ips.
+            # fd.snet (server network) is Falco's CIDR-matching field; fd.sip is
+            # exact-IP only and rejects CIDRs. Matches "is the remote peer inside
+            # our pod/service subnets" for an outbound connection.
             - macro: sddp_to_cluster_internal
-              condition: (fd.sip in (sddp_cluster_cidrs) or fd.snet in (sddp_cluster_cidrs))
+              condition: (fd.snet in (sddp_cluster_cidrs))
             - rule: SDDP R-06 Unexpected internal connection (off communication graph)
               desc: An app pod initiated a cluster-internal connection outside its declared graph.
               condition: >
