@@ -91,10 +91,16 @@ spec:
             #############
             - rule: Terminal shell in container      # -> our R-01
               enabled: false
+              override:
+                enabled: replace
             - rule: Run shell untrusted              # -> our R-01
               enabled: false
+              override:
+                enabled: replace
             - rule: Linux Kernel Module Injection Detected   # -> our R-04
               enabled: false
+              override:
+                enabled: replace
 
             #############
             # 1. Scoping — mirror POL-02/04/05's named-exception model
