@@ -81,6 +81,22 @@ spec:
             # SDDP runtime detection R-01..R-08 (FALCO-SDDP-001). Detective only.
 
             #############
+            # 0. Disable overlapping upstream rules. Falco fires only the FIRST
+            #    matching rule per event, and the upstream ruleset loads before
+            #    this one — so without these, the upstream rule wins with its own
+            #    (lower) severity AND ignores our platform-namespace exclusion
+            #    (an exec into a kyverno pod would still alert). Disabling them
+            #    makes our scoped, severity-mapped R-0x authoritative for these
+            #    behaviours; all other upstream rules stay as the baseline (spec §1).
+            #############
+            - rule: Terminal shell in container      # -> our R-01
+              enabled: false
+            - rule: Run shell untrusted              # -> our R-01
+              enabled: false
+            - rule: Linux Kernel Module Injection Detected   # -> our R-04
+              enabled: false
+
+            #############
             # 1. Scoping — mirror POL-02/04/05's named-exception model
             #############
             - list: sddp_platform_namespaces
