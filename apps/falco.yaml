@@ -152,10 +152,7 @@ spec:
                 spawned_process and app_container
                 and proc.name in (sddp_shell_binaries)
                 and proc.tty != 0
-              output: >
-                R-01 CRITICAL interactive shell in app container
-                (ns=%k8s.ns.name pod=%k8s.pod.name container=%container.name shell=%proc.name
-                 parent=%proc.pname cmdline=%proc.cmdline user=%user.name)
+              output: "R-01 CRITICAL interactive shell in app container (ns=%k8s.ns.name pod=%k8s.pod.name container=%container.name shell=%proc.name parent=%proc.pname cmdline=%proc.cmdline user=%user.name)"
               priority: CRITICAL
               tags: [sddp, R-01, TH-16, severity_critical, shell]
 
@@ -165,10 +162,7 @@ spec:
               condition: >
                 (open_read or open_write) and app_container
                 and fd.name in (sddp_container_runtime_sockets)
-              output: >
-                R-02 CRITICAL runtime socket access
-                (ns=%k8s.ns.name pod=%k8s.pod.name container=%container.name file=%fd.name
-                 proc=%proc.name cmdline=%proc.cmdline user=%user.name)
+              output: "R-02 CRITICAL runtime socket access (ns=%k8s.ns.name pod=%k8s.pod.name container=%container.name file=%fd.name proc=%proc.name cmdline=%proc.cmdline user=%user.name)"
               priority: CRITICAL
               tags: [sddp, R-02, TH-16, severity_critical, escape]
 
@@ -181,10 +175,7 @@ spec:
             - rule: SDDP R-03 Sensitive host path write attempt
               desc: A write was attempted to a sensitive host path from an application container.
               condition: open_write and app_container and sddp_sensitive_host_paths
-              output: >
-                R-03 CRITICAL sensitive host-path write
-                (ns=%k8s.ns.name pod=%k8s.pod.name container=%container.name file=%fd.name
-                 proc=%proc.name cmdline=%proc.cmdline user=%user.name)
+              output: "R-03 CRITICAL sensitive host-path write (ns=%k8s.ns.name pod=%k8s.pod.name container=%container.name file=%fd.name proc=%proc.name cmdline=%proc.cmdline user=%user.name)"
               priority: CRITICAL
               tags: [sddp, R-03, TH-16, severity_critical, escape]
 
@@ -195,10 +186,7 @@ spec:
                 app_container
                 and (evt.type in (init_module, finit_module)
                      or (spawned_process and proc.name in (sddp_kmod_binaries)))
-              output: >
-                R-04 CRITICAL kernel module load attempt
-                (ns=%k8s.ns.name pod=%k8s.pod.name container=%container.name syscall=%evt.type
-                 proc=%proc.name cmdline=%proc.cmdline user=%user.name)
+              output: "R-04 CRITICAL kernel module load attempt (ns=%k8s.ns.name pod=%k8s.pod.name container=%container.name syscall=%evt.type proc=%proc.name cmdline=%proc.cmdline user=%user.name)"
               priority: CRITICAL
               tags: [sddp, R-04, TH-16, severity_critical, escape]
 
@@ -210,10 +198,7 @@ spec:
             - rule: SDDP R-05 Unexpected ServiceAccount token read
               desc: An application pod read its mounted ServiceAccount token (possible identity misuse).
               condition: open_read and app_container and sddp_sa_token_path
-              output: >
-                R-05 HIGH serviceaccount token read
-                (ns=%k8s.ns.name pod=%k8s.pod.name container=%container.name file=%fd.name
-                 proc=%proc.name cmdline=%proc.cmdline user=%user.name)
+              output: "R-05 HIGH serviceaccount token read (ns=%k8s.ns.name pod=%k8s.pod.name container=%container.name file=%fd.name proc=%proc.name cmdline=%proc.cmdline user=%user.name)"
               priority: ERROR
               tags: [sddp, R-05, TH-27, severity_high, identity]
 
@@ -231,10 +216,7 @@ spec:
               condition: >
                 outbound and app_container and sddp_to_cluster_internal
                 and not fd.sip in (sddp_expected_internal_ips)
-              output: >
-                R-06 HIGH off-graph internal connection attempt
-                (ns=%k8s.ns.name pod=%k8s.pod.name container=%container.name
-                 dest=%fd.sip:%fd.sport proto=%fd.l4proto proc=%proc.name)
+              output: "R-06 HIGH off-graph internal connection attempt (ns=%k8s.ns.name pod=%k8s.pod.name container=%container.name dest=%fd.sip:%fd.sport proto=%fd.l4proto proc=%proc.name)"
               priority: ERROR
               tags: [sddp, R-06, TH-27, severity_high, lateral]
 
@@ -247,10 +229,7 @@ spec:
                 and not sddp_to_cluster_internal
                 and not fd.sip in (sddp_egress_allowlist_ips)
                 and fd.sip != "0.0.0.0"
-              output: >
-                R-07 MEDIUM non-allowlisted egress
-                (ns=%k8s.ns.name pod=%k8s.pod.name container=%container.name
-                 dest=%fd.sip:%fd.sport proto=%fd.l4proto proc=%proc.name)
+              output: "R-07 MEDIUM non-allowlisted egress (ns=%k8s.ns.name pod=%k8s.pod.name container=%container.name dest=%fd.sip:%fd.sport proto=%fd.l4proto proc=%proc.name)"
               priority: WARNING
               tags: [sddp, R-07, TH-34, severity_medium, egress]
 
@@ -263,10 +242,7 @@ spec:
                 outbound and app_container
                 and fd.l4proto = udp and fd.sport = 53
                 and not fd.sip in (sddp_kube_dns_ips)
-              output: >
-                R-08 MEDIUM DNS to non-cluster resolver
-                (ns=%k8s.ns.name pod=%k8s.pod.name container=%container.name
-                 resolver=%fd.sip proc=%proc.name query=%fd.name)
+              output: "R-08 MEDIUM DNS to non-cluster resolver (ns=%k8s.ns.name pod=%k8s.pod.name container=%container.name resolver=%fd.sip proc=%proc.name query=%fd.name)"
               priority: WARNING
               tags: [sddp, R-08, TH-34, severity_medium, dns]
   destination:
