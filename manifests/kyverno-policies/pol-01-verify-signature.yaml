@@ -24,9 +24,10 @@
 # namespace, and admission happens before any pod/node exists). DOCR is private,
 # so without its own credential Kyverno gets 401. `imageRegistryCredentials.secrets`
 # points at a docker-registry secret `docr-read` in the kyverno namespace, holding
-# a DOCR read token. That secret is provisioned IMPERATIVELY (it can't live in git
-# plaintext) and re-created after any cluster recreate — see the platform-config
-# README; Week-6 External Secrets + Vault will adopt it.
+# a DOCR read token. That secret can't live in git plaintext, so it is materialized
+# declaratively by the External Secrets Operator from the DOCR token stored in
+# Infisical (manifests/external-secrets/es-docr-read.yaml) — no longer a hand-run
+# `kubectl create secret` after each cluster recreate.
 #
 # Scope. imageReferences is scoped to the FIRST-PARTY set (sddp-*) so POL-01 never
 # matches the stock Postgres db (signed, if at all, by its own vendor, not our CI).

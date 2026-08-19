@@ -86,6 +86,10 @@ spec:
                 # its DaemonSet uses host networking, so a NetworkPolicy would
                 # not govern it anyway. Cilium will follow.
                 - platform-falco
+                # external-secrets: platform tooling like argocd/kyverno, not an
+                # application namespace — governed as trusted platform, not by
+                # the app-tier NetworkPolicy requirement.
+                - external-secrets
       context:
         # List the NetworkPolicy objects in THIS pod's namespace and reduce to
         # a count. Deliberately NO label_match against the pod's selector: that

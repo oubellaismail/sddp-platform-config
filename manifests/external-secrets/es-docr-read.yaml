@@ -1,0 +1,28 @@
+# docr-read — the DOCR read credential Kyverno uses to fetch image-signature
+# bundles from the private registry at admission. Formerly created by hand after
+# every cluster recreate; now materialized declaratively by ESO from the
+# `docr_token` value in Infisical. Rendered as a dockerconfigjson secret (the
+# type Kyverno's imageRegistryCredentials expects), with the DOCR token used as
+# both username and password (registry.digitalocean.com token auth).
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: docr-read
+  namespace: kyverno
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    name: infisical
+    kind: ClusterSecretStore
+  target:
+    name: docr-read
+    creationPolicy: Owner
+    template:
+      type: kubernetes.io/dockerconfigjson
+      data:
+        .dockerconfigjson: |
+          {"auths":{"registry.digitalocean.com":{"username":"{{ .token }}","password":"{{ .token }}","auth":"{{ printf "%s:%s" .token .token | b64enc }}"}}}
+  data:
+    - secretKey: token
+      remoteRef:
+        key: docr_token

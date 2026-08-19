@@ -71,6 +71,9 @@ spec:
                 # platform-falco: Falco + Falcosidekick pull from
                 # docker.io/falcosecurity, their own vendor registry — not DOCR.
                 - platform-falco
+                # external-secrets: the External Secrets Operator pulls from
+                # ghcr.io/external-secrets, its own vendor registry — not DOCR.
+                - external-secrets
       validate:
         # Rolled out Audit-first (PolicyReports flagged nothing — no app-namespace
         # workloads yet), then flipped to Enforce — same fail-closed discipline as
