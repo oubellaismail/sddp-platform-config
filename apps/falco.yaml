@@ -138,8 +138,15 @@ spec:
               # frontend / backend / db (sddp-app) + CoreDNS. Re-fetch after any
               # `terraform destroy`/recreate — ClusterIPs are reassigned.
               items: ['"10.114.57.100"', '"10.114.48.178"', '"10.114.54.79"', '"10.114.32.10"']
-            - list: sddp_egress_allowlist_ips    # named egress allowlist (Cluster Arch §7.3)
-              items: []                                            # FILL when the allowlist is defined (with Cilium)
+            - list: sddp_egress_allowlist_ips    # app-namespace external-egress allowlist
+              # Intentionally empty: app tiers (frontend/backend/db) have NO
+              # external egress — Cilium enforces default-deny egress, so any
+              # app-pod outbound to a non-cluster IP is off-allowlist by design
+              # and R-07 fires as the detective backstop. The one named external
+              # egress (ESO -> app.infisical.com) lives in the external-secrets
+              # namespace, which is not an app_container, so it's out of scope
+              # for this list and handled by its own CiliumNetworkPolicy.
+              items: []
 
             #############
             # 3. Rules
