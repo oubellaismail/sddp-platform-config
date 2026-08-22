@@ -1,0 +1,48 @@
+# Egress lockdown for the External Secrets Operator namespace.
+#
+# ESO is the one platform component allowed to reach a public SaaS endpoint:
+# it authenticates to Infisical Cloud (app.infisical.com) to materialize the
+# cluster's secrets. Everything else outbound is denied. Application namespaces
+# get no such external allowance.
+#
+# Egress-only on purpose: the validating webhook receives ingress from the API
+# server, so this policy constrains only outbound traffic and leaves that
+# ingress path untouched.
+#
+# Allowed egress:
+#   1. DNS to kube-dns, with the L7 DNS proxy engaged. This is REQUIRED for the
+#      FQDN rule below to work — toFQDNs enforcement depends on the DNS proxy
+#      observing the app.infisical.com lookup to learn its current addresses.
+#   2. app.infisical.com over HTTPS/443 (the Infisical API host the store uses).
+#   3. The Kubernetes API server, so ESO can read/write Secrets and its CRs.
+#
+# Anything else — any other external host, any other in-cluster pod — is denied.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: external-secrets-egress
+  namespace: external-secrets
+spec:
+  endpointSelector: {}
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            k8s-app: kube-dns
+            io.kubernetes.pod.namespace: kube-system
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+          rules:
+            dns:
+              - matchPattern: "*"
+    - toFQDNs:
+        - matchName: "app.infisical.com"
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP
+    - toEntities:
+        - kube-apiserver
