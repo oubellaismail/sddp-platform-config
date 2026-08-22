@@ -137,7 +137,7 @@ spec:
             - list: sddp_expected_internal_ips   # the declared communication graph, as ClusterIPs
               # frontend / backend / db (sddp-app) + CoreDNS. Re-fetch after any
               # `terraform destroy`/recreate — ClusterIPs are reassigned.
-              items: ['"10.114.47.164"', '"10.114.45.4"', '"10.114.46.49"', '"10.114.32.10"']
+              items: ['"10.114.57.100"', '"10.114.48.178"', '"10.114.54.79"', '"10.114.32.10"']
             - list: sddp_egress_allowlist_ips    # named egress allowlist (Cluster Arch §7.3)
               items: []                                            # FILL when the allowlist is defined (with Cilium)
 
