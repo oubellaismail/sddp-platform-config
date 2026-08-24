@@ -79,6 +79,9 @@ spec:
             alertmanager:
               hostport: "http://observability-prometheus-alertmanager.platform-observability.svc.cluster.local:9093"
               minimumpriority: "error"
+              # modern Alertmanager (v3.x) removed the v1 API — Falcosidekick's
+              # default /api/v1/alerts returns 410 Gone; use v2.
+              endpoint: "/api/v2/alerts"
 
         # ---- R-01..R-08. Mounted as an extra rules file ON TOP of the upstream
         # default ruleset (so built-in macros spawned_process/open_read/
