@@ -90,6 +90,9 @@ spec:
                 # application namespace — governed as trusted platform, not by
                 # the app-tier NetworkPolicy requirement.
                 - external-secrets
+                # platform-observability: Loki/Alloy/Grafana — trusted platform
+                # tooling like argocd/kyverno, not an application namespace.
+                - platform-observability
       context:
         # List the NetworkPolicy objects in THIS pod's namespace and reduce to
         # a count. Deliberately NO label_match against the pod's selector: that

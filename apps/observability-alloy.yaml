@@ -1,0 +1,115 @@
+# Grafana Alloy — per-node log collector (DaemonSet), the Promtail successor.
+#
+# Tails every pod's logs from the host's /var/log/pods and ships them to Loki.
+# Because it reads root-owned host log files via a hostPath mount, it runs
+# privileged/root — hence platform-observability's POL-02 exception. It stays
+# under POL-03 (limits on both containers). Node-local by construction: each
+# DaemonSet pod only matches log files that exist on its own node.
+#
+# sync-wave 1 (after Loki) so loki.write has an endpoint to push to.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: observability-alloy
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  project: default
+  source:
+    repoURL: https://grafana.github.io/helm-charts
+    chart: alloy
+    targetRevision: 1.11.1
+    helm:
+      valuesObject:
+        controller:
+          type: daemonset
+        rbac:
+          create: true
+        # POL-03: config-reloader sidecar defaults to requests-only.
+        configReloader:
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              cpu: 50m
+              memory: 64Mi
+        alloy:
+          # read host pod logs → mount the /var/log hostPath
+          mounts:
+            varlog: true
+          # /var/log/pods files are root-owned → run as root to read them
+          securityContext:
+            runAsUser: 0
+            runAsGroup: 0
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 300m
+              memory: 256Mi
+          configMap:
+            content: |-
+              // Discover every pod in the cluster.
+              discovery.kubernetes "pods" {
+                role = "pod"
+              }
+
+              // Map pod metadata → Loki labels, and build the on-disk log path.
+              discovery.relabel "pod_logs" {
+                targets = discovery.kubernetes.pods.targets
+
+                rule {
+                  source_labels = ["__meta_kubernetes_namespace"]
+                  target_label  = "namespace"
+                }
+                rule {
+                  source_labels = ["__meta_kubernetes_pod_name"]
+                  target_label  = "pod"
+                }
+                rule {
+                  source_labels = ["__meta_kubernetes_pod_container_name"]
+                  target_label  = "container"
+                }
+                rule {
+                  source_labels = ["__meta_kubernetes_namespace", "__meta_kubernetes_pod_container_name"]
+                  separator     = "/"
+                  target_label  = "job"
+                }
+                // /var/log/pods/<ns>_<pod>_<uid>/<container>/*.log
+                rule {
+                  source_labels = ["__meta_kubernetes_pod_uid", "__meta_kubernetes_pod_container_name"]
+                  separator     = "/"
+                  action        = "replace"
+                  replacement   = "/var/log/pods/*$1/*.log"
+                  target_label  = "__path__"
+                }
+              }
+
+              // Only files that exist on THIS node match → naturally node-local.
+              local.file_match "pod_logs" {
+                path_targets = discovery.relabel.pod_logs.output
+              }
+
+              loki.source.file "pod_logs" {
+                targets    = local.file_match.pod_logs.targets
+                forward_to = [loki.write.default.receiver]
+              }
+
+              // Ship to the in-cluster Loki single-binary.
+              loki.write "default" {
+                endpoint {
+                  url = "http://loki.platform-observability.svc.cluster.local:3100/loki/api/v1/push"
+                }
+              }
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: platform-observability
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
