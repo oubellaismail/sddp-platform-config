@@ -47,6 +47,13 @@ spec:
                 # Service name is the Helm release name (= the loki Application's name).
                 url: http://observability-loki.platform-observability.svc.cluster.local:3100
                 isDefault: true
+              - name: Prometheus
+                type: prometheus
+                uid: prometheus
+                access: proxy
+                # prometheus chart's server Service (release "prometheus" + "-server", port 80).
+                url: http://prometheus-server.platform-observability.svc.cluster.local
+                isDefault: false
   destination:
     server: https://kubernetes.default.svc
     namespace: platform-observability
