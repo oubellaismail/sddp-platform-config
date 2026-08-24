@@ -98,10 +98,11 @@ spec:
                 forward_to = [loki.write.default.receiver]
               }
 
-              // Ship to the in-cluster Loki single-binary.
+              // Ship to the in-cluster Loki single-binary. Service name is the
+              // Helm release name (= this ArgoCD Application's name).
               loki.write "default" {
                 endpoint {
-                  url = "http://loki.platform-observability.svc.cluster.local:3100/loki/api/v1/push"
+                  url = "http://observability-loki.platform-observability.svc.cluster.local:3100/loki/api/v1/push"
                 }
               }
   destination:
