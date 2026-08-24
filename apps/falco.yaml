@@ -70,6 +70,15 @@ spec:
             limits: {cpu: 200m, memory: 128Mi}
           webui:
             enabled: false
+          # Close the alerting seam: route Falco events to Alertmanager. Only
+          # high+critical (Falco ERROR/CRITICAL = R-01..R-06) become alerts;
+          # medium (WARNING = R-07/R-08 egress/DNS, noisy) stay logs-only. Falco
+          # events already reach Loki via Alloy tailing the falco pod stdout
+          # (PCFG-011), so NO loki output here — it would duplicate that stream.
+          config:
+            alertmanager:
+              hostport: "http://observability-prometheus-alertmanager.platform-observability.svc.cluster.local:9093"
+              minimumpriority: "error"
 
         # ---- R-01..R-08. Mounted as an extra rules file ON TOP of the upstream
         # default ruleset (so built-in macros spawned_process/open_read/
