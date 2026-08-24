@@ -44,7 +44,8 @@ spec:
                 type: loki
                 uid: loki
                 access: proxy
-                url: http://loki.platform-observability.svc.cluster.local:3100
+                # Service name is the Helm release name (= the loki Application's name).
+                url: http://observability-loki.platform-observability.svc.cluster.local:3100
                 isDefault: true
   destination:
     server: https://kubernetes.default.svc
