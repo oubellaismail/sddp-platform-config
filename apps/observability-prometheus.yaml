@@ -1,0 +1,93 @@
+# Prometheus + Alertmanager — the metrics + alerting half of observability.
+#
+# This is the Week-5 "minimal alerting" the dependency-driven build order skipped
+# (there was no monitoring stack until now) — built here rather than extended.
+# Prometheus scrapes cluster + control metrics; Alertmanager is the "fail-closed
+# PLUS alert" path the policy design promised. Lands in the existing
+# platform-observability namespace (already a POL-02/04/05 named exception for the
+# log stack) alongside Loki/Grafana — so NO new policy changes; it just stays
+# under POL-03 (limits on every container, incl. the configmap-reload sidecar).
+#
+# Lean footprint for the 3-node cluster: emptyDir + 24h retention (metrics/alerts
+# are real-time — no 3rd CSI volume), node-exporter + pushgateway disabled
+# (container CPU/mem still come from the kubelet/cAdvisor scrape).
+#
+# sync-wave 1 (with Grafana/Alloy) — Prometheus is independent of Loki's ordering.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: observability-prometheus
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  project: default
+  source:
+    repoURL: https://prometheus-community.github.io/helm-charts
+    chart: prometheus
+    targetRevision: 29.27.0
+    helm:
+      valuesObject:
+        server:
+          persistentVolume:
+            enabled: false
+          retention: "24h"
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+        configmapReload:
+          prometheus:
+            resources:
+              requests:
+                cpu: 10m
+                memory: 32Mi
+              limits:
+                cpu: 50m
+                memory: 64Mi
+          alertmanager:
+            resources:
+              requests:
+                cpu: 10m
+                memory: 32Mi
+              limits:
+                cpu: 50m
+                memory: 64Mi
+        alertmanager:
+          enabled: true
+          persistence:
+            enabled: false
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+        kube-state-metrics:
+          enabled: true
+          resources:
+            requests:
+              cpu: 25m
+              memory: 64Mi
+            limits:
+              cpu: 100m
+              memory: 128Mi
+        # host DaemonSet — lean; container metrics come from kubelet/cAdvisor.
+        prometheus-node-exporter:
+          enabled: false
+        # no batch-job push metrics in this platform.
+        prometheus-pushgateway:
+          enabled: false
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: platform-observability
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
