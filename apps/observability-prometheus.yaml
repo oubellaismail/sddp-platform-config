@@ -82,6 +82,59 @@ spec:
         # no batch-job push metrics in this platform.
         prometheus-pushgateway:
           enabled: false
+        # Scrape the platform's security signals (their metrics services aren't
+        # annotated for the default kubernetes-service-endpoints job, so target
+        # them explicitly): Kyverno admission/policy metrics, Falcosidekick event
+        # counts, Hubble network-flow metrics.
+        extraScrapeConfigs: |
+          - job_name: kyverno
+            kubernetes_sd_configs:
+              - role: endpoints
+                namespaces:
+                  names: [kyverno]
+            relabel_configs:
+              - source_labels: [__meta_kubernetes_service_name]
+                regex: '.+-metrics'
+                action: keep
+          - job_name: falcosidekick
+            kubernetes_sd_configs:
+              - role: endpoints
+                namespaces:
+                  names: [platform-falco]
+            relabel_configs:
+              - source_labels: [__meta_kubernetes_service_name, __meta_kubernetes_endpoint_port_name]
+                regex: 'falco-falcosidekick;http'
+                action: keep
+          - job_name: hubble
+            kubernetes_sd_configs:
+              - role: endpoints
+                namespaces:
+                  names: [kube-system]
+            relabel_configs:
+              - source_labels: [__meta_kubernetes_service_name]
+                regex: 'hubble-metrics'
+                action: keep
+        serverFiles:
+          alerting_rules.yml:
+            groups:
+              - name: sddp-observability
+                rules:
+                  # Always-firing watchdog — proves the Prometheus→Alertmanager
+                  # pipeline is alive (standard dead-man's-switch pattern).
+                  - alert: Watchdog
+                    expr: vector(1)
+                    labels:
+                      severity: none
+                    annotations:
+                      summary: "Alerting pipeline is alive (always-on watchdog)."
+                  # Real signal: a pod restarting repeatedly (kube-state-metrics).
+                  - alert: SDDPPodCrashLooping
+                    expr: increase(kube_pod_container_status_restarts_total[10m]) > 3
+                    for: 2m
+                    labels:
+                      severity: warning
+                    annotations:
+                      summary: "Pod {{ $labels.namespace }}/{{ $labels.pod }} restarting repeatedly."
   destination:
     server: https://kubernetes.default.svc
     namespace: platform-observability
