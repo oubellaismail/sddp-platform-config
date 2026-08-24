@@ -54,6 +54,118 @@ spec:
                 # server Service = Helm release name (observability-prometheus) + "-server", port 80.
                 url: http://observability-prometheus-server.platform-observability.svc.cluster.local
                 isDefault: false
+        # Provisioned dashboard: the security-signals story in one view (Kyverno
+        # admissions/policy results, Falco events by priority, Hubble flow rate,
+        # live Falco event log). Delivered inline (no dashboard sidecar).
+        dashboardProviders:
+          dashboardproviders.yaml:
+            apiVersion: 1
+            providers:
+              - name: sddp
+                orgId: 1
+                folder: SDDP
+                type: file
+                disableDeletion: false
+                editable: true
+                options:
+                  path: /var/lib/grafana/dashboards/sddp
+        dashboards:
+          sddp:
+            sddp-security-overview:
+              json: |
+                {
+                  "uid": "sddp-security",
+                  "title": "SDDP Security Overview",
+                  "tags": ["sddp", "security"],
+                  "timezone": "browser",
+                  "schemaVersion": 39,
+                  "version": 1,
+                  "refresh": "30s",
+                  "time": { "from": "now-1h", "to": "now" },
+                  "templating": { "list": [] },
+                  "annotations": { "list": [] },
+                  "panels": [
+                    {
+                      "id": 1,
+                      "type": "timeseries",
+                      "title": "Kyverno admissions (allowed vs denied)",
+                      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+                      "datasource": { "type": "prometheus", "uid": "prometheus" },
+                      "fieldConfig": { "defaults": { "custom": { "drawStyle": "line", "fillOpacity": 15 } }, "overrides": [] },
+                      "targets": [
+                        {
+                          "refId": "A",
+                          "datasource": { "type": "prometheus", "uid": "prometheus" },
+                          "expr": "sum by (request_allowed) (increase(kyverno_admission_requests_total[5m]))",
+                          "legendFormat": "allowed={{request_allowed}}"
+                        }
+                      ]
+                    },
+                    {
+                      "id": 2,
+                      "type": "piechart",
+                      "title": "Kyverno policy results (by rule_result)",
+                      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+                      "datasource": { "type": "prometheus", "uid": "prometheus" },
+                      "options": { "legend": { "showLegend": true, "placement": "right" }, "reduceOptions": { "calcs": ["lastNotNull"] } },
+                      "targets": [
+                        {
+                          "refId": "A",
+                          "datasource": { "type": "prometheus", "uid": "prometheus" },
+                          "expr": "sum by (rule_result) (kyverno_policy_results_total)",
+                          "legendFormat": "{{rule_result}}"
+                        }
+                      ]
+                    },
+                    {
+                      "id": 3,
+                      "type": "timeseries",
+                      "title": "Falco events by priority",
+                      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+                      "datasource": { "type": "prometheus", "uid": "prometheus" },
+                      "fieldConfig": { "defaults": { "custom": { "drawStyle": "bars", "fillOpacity": 60, "stacking": { "mode": "normal" } } }, "overrides": [] },
+                      "targets": [
+                        {
+                          "refId": "A",
+                          "datasource": { "type": "prometheus", "uid": "prometheus" },
+                          "expr": "sum by (priority) (increase(falcosecurity_falcosidekick_falco_events_total[5m]))",
+                          "legendFormat": "{{priority}}"
+                        }
+                      ]
+                    },
+                    {
+                      "id": 4,
+                      "type": "timeseries",
+                      "title": "Hubble network flow rate (flows/s)",
+                      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+                      "datasource": { "type": "prometheus", "uid": "prometheus" },
+                      "fieldConfig": { "defaults": { "custom": { "drawStyle": "line", "fillOpacity": 15 } }, "overrides": [] },
+                      "targets": [
+                        {
+                          "refId": "A",
+                          "datasource": { "type": "prometheus", "uid": "prometheus" },
+                          "expr": "sum(rate(hubble_flows_processed_total[5m]))",
+                          "legendFormat": "flows/s"
+                        }
+                      ]
+                    },
+                    {
+                      "id": 5,
+                      "type": "logs",
+                      "title": "Falco runtime events (live)",
+                      "gridPos": { "h": 9, "w": 24, "x": 0, "y": 16 },
+                      "datasource": { "type": "loki", "uid": "loki" },
+                      "options": { "showTime": true, "wrapLogMessage": true, "sortOrder": "Descending" },
+                      "targets": [
+                        {
+                          "refId": "A",
+                          "datasource": { "type": "loki", "uid": "loki" },
+                          "expr": "{namespace=\"platform-falco\", container=\"falco\"} |= \"priority\""
+                        }
+                      ]
+                    }
+                  ]
+                }
   destination:
     server: https://kubernetes.default.svc
     namespace: platform-observability
