@@ -51,8 +51,8 @@ spec:
                 type: prometheus
                 uid: prometheus
                 access: proxy
-                # prometheus chart's server Service (release "prometheus" + "-server", port 80).
-                url: http://prometheus-server.platform-observability.svc.cluster.local
+                # server Service = Helm release name (observability-prometheus) + "-server", port 80.
+                url: http://observability-prometheus-server.platform-observability.svc.cluster.local
                 isDefault: false
   destination:
     server: https://kubernetes.default.svc
