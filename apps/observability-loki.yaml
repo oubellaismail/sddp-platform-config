@@ -87,8 +87,12 @@ spec:
               installOperator: false
           serviceMonitor:
             enabled: false
-        # POL-03: the k8s-sidecar (rule/dashboard watcher) needs limits too.
+        # The k8s-sidecar is the Loki-ruler config watcher — not needed for log
+        # aggregation (rules/alerting arrive with Prometheus later). Disabled so
+        # it stops OOM-flapping; re-enable with proper limits when the ruler lands.
         sidecar:
+          rules:
+            enabled: false
           resources:
             requests:
               cpu: 25m
