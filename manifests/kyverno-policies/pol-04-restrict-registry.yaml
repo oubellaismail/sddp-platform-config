@@ -74,6 +74,9 @@ spec:
                 # external-secrets: the External Secrets Operator pulls from
                 # ghcr.io/external-secrets, its own vendor registry — not DOCR.
                 - external-secrets
+                # platform-observability: Loki/Alloy/Grafana pull from
+                # docker.io/grafana, their own vendor registry — not DOCR.
+                - platform-observability
       validate:
         # Rolled out Audit-first (PolicyReports flagged nothing — no app-namespace
         # workloads yet), then flipped to Enforce — same fail-closed discipline as

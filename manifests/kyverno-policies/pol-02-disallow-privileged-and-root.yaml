@@ -43,6 +43,10 @@ spec:
                 # rule too so its explicit root securityContext is not overwritten
                 # by the runAsNonRoot default.
                 - platform-falco
+                # platform-observability: Grafana Alloy reads root-owned host pod
+                # logs via a hostPath mount and runs as root (its named exception).
+                # Trusted platform tooling, same bucket as platform-falco.
+                - platform-observability
       mutate:
         patchStrategicMerge:
           spec:
@@ -71,6 +75,9 @@ spec:
                 # cannot satisfy the restricted profile (its named exception,
                 # Falco spec §3). The detective layer is itself trusted platform.
                 - platform-falco
+                # platform-observability: Alloy (root + hostPath) can't satisfy
+                # the restricted profile — its named exception, trusted platform.
+                - platform-observability
       validate:
         failureAction: Enforce
         podSecurity:

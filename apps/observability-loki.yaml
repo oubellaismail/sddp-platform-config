@@ -1,0 +1,107 @@
+# Loki — log store for the platform's observability plane.
+#
+# Single-binary (monolithic) mode with filesystem storage on a PVC — the same
+# do-block-storage pattern as the app db. Short retention (72h): this is a PoC
+# audit trail, not long-term SIEM. Grafana (single pane of glass) reads from
+# this; Alloy (per-node collector) writes to it.
+#
+# platform-observability is a named exception in POL-02 (Alloy runs privileged/
+# root to read host logs), POL-04 (charts pull from docker.io/grafana, not DOCR)
+# and POL-05 (trusted platform tooling, same bucket as argocd/kyverno) — but it
+# stays UNDER POL-03, so every container below declares resource limits.
+#
+# sync-wave 0 (before Grafana/Alloy at wave 1) so the loki Service exists first.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: observability-loki
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  project: default
+  source:
+    repoURL: https://grafana.github.io/helm-charts
+    chart: loki
+    targetRevision: 7.3.0
+    helm:
+      valuesObject:
+        deploymentMode: SingleBinary
+        loki:
+          auth_enabled: false
+          commonConfig:
+            replication_factor: 1
+          storage:
+            type: filesystem
+          schemaConfig:
+            configs:
+              - from: "2024-04-01"
+                store: tsdb
+                object_store: filesystem
+                schema: v13
+                index:
+                  prefix: index_
+                  period: 24h
+          limits_config:
+            retention_period: 72h
+          compactor:
+            retention_enabled: true
+            delete_request_store: filesystem
+        singleBinary:
+          replicas: 1
+          persistence:
+            enabled: true
+            storageClass: do-block-storage
+            size: 10Gi
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+        # SingleBinary owns everything — zero out the scalable targets.
+        backend:
+          replicas: 0
+        read:
+          replicas: 0
+        write:
+          replicas: 0
+        # Heavy optional components off for the small 3-node cluster.
+        chunksCache:
+          enabled: false
+        resultsCache:
+          enabled: false
+        lokiCanary:
+          enabled: false
+        test:
+          enabled: false
+        gateway:
+          enabled: false
+        minio:
+          enabled: false
+        monitoring:
+          selfMonitoring:
+            enabled: false
+            grafanaAgent:
+              installOperator: false
+          serviceMonitor:
+            enabled: false
+        # POL-03: the k8s-sidecar (rule/dashboard watcher) needs limits too.
+        sidecar:
+          resources:
+            requests:
+              cpu: 25m
+              memory: 32Mi
+            limits:
+              cpu: 100m
+              memory: 64Mi
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: platform-observability
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
