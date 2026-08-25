@@ -27,6 +27,15 @@ spec:
           replicaCount: 1
           service:
             type: LoadBalancer
+          # Security response headers enforced centrally at the front door (spec
+          # §5) — every app inherits them, no per-app work. The chart creates the
+          # custom-add-headers ConfigMap and wires `add-headers` automatically
+          # (via more_set_headers, so these override weaker upstream values).
+          addHeaders:
+            X-Frame-Options: "DENY"                 # no framing → anti-clickjacking
+            X-Content-Type-Options: "nosniff"       # no MIME sniffing
+            Referrer-Policy: "no-referrer"
+            X-XSS-Protection: "1; mode=block"
           # WAF: ModSecurity + OWASP Core Rule Set (both bundled in the 1.15.1
           # image) — the request-surface half of the threat-model's C-17 gate.
           # Rolled out audit-first (DetectionOnly) then flipped to `On`
@@ -35,6 +44,8 @@ spec:
           # log → stdout as JSON → Alloy → Loki, so WAF hits are queryable in
           # Grafana with the other security signals.
           config:
+            # strip framework/version disclosure from upstream responses
+            hide-headers: "X-Powered-By,Server"
             enable-modsecurity: "true"
             enable-owasp-modsecurity-crs: "true"
             modsecurity-snippet: |
