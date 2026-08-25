@@ -47,6 +47,10 @@ spec:
           ingressClassName: nginx
           annotations:
             cert-manager.io/cluster-issuer: letsencrypt
+            # Rate-limiting (C-17, TH-32 flood control). Generous for a dashboard
+            # UI; these DO block over-limit, unlike the DetectionOnly WAF.
+            nginx.ingress.kubernetes.io/limit-rps: "30"
+            nginx.ingress.kubernetes.io/limit-connections: "20"
           hosts:
             - grafana.project-demo.tech
           tls:

@@ -27,6 +27,22 @@ spec:
           replicaCount: 1
           service:
             type: LoadBalancer
+          # WAF: ModSecurity + OWASP Core Rule Set (both bundled in the 1.15.1
+          # image) — the request-surface half of the threat-model's C-17 gate.
+          # Rolled out audit-first: SecRuleEngine DetectionOnly LOGS violations
+          # without blocking (flip to `On` once demo traffic shows no false
+          # positives). Audit log → stdout as JSON → Alloy → Loki, so WAF hits
+          # are queryable in Grafana with the other security signals.
+          config:
+            enable-modsecurity: "true"
+            enable-owasp-modsecurity-crs: "true"
+            modsecurity-snippet: |
+              SecRuleEngine DetectionOnly
+              SecRequestBodyAccess On
+              SecAuditEngine RelevantOnly
+              SecAuditLog /dev/stdout
+              SecAuditLogFormat JSON
+              SecAuditLogType Serial
           # make nginx the default IngressClass so Ingress resources resolve to it
           ingressClassResource:
             default: true
