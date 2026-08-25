@@ -1,0 +1,49 @@
+# cert-manager — automatic TLS certificate issuance/renewal via Let's Encrypt.
+# Pairs with ingress-nginx: Ingresses annotated for the ClusterIssuer get real
+# Let's Encrypt certs (HTTP-01 challenge, solved through the ingress controller).
+#
+# cert-manager is a named exception in POL-04 (images from quay.io, not DOCR) and
+# POL-05 (trusted platform tooling). Stays UNDER POL-02 (all components non-root)
+# and POL-03 (limits on controller, webhook, cainjector, startupapicheck).
+#
+# The Let's Encrypt ClusterIssuer is delivered separately (cert-manager-issuer)
+# once these CRDs exist.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: cert-manager
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://charts.jetstack.io
+    chart: cert-manager
+    targetRevision: v1.21.1
+    helm:
+      valuesObject:
+        crds:
+          enabled: true
+        resources:
+          requests: {cpu: 50m, memory: 64Mi}
+          limits: {cpu: 200m, memory: 128Mi}
+        webhook:
+          resources:
+            requests: {cpu: 25m, memory: 32Mi}
+            limits: {cpu: 100m, memory: 64Mi}
+        cainjector:
+          resources:
+            requests: {cpu: 25m, memory: 64Mi}
+            limits: {cpu: 100m, memory: 128Mi}
+        startupapicheck:
+          resources:
+            requests: {cpu: 25m, memory: 32Mi}
+            limits: {cpu: 100m, memory: 64Mi}
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: cert-manager
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

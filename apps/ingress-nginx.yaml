@@ -1,0 +1,61 @@
+# ingress-nginx — the north-south ingress controller (cluster-architecture §7.3,
+# "Ingress → a namespace's frontend Service", the one structural north-south
+# crossing). DOKS-managed Cilium doesn't expose its own ingress controller, so
+# we run ingress-nginx. Its LoadBalancer Service makes DigitalOcean provision a
+# managed LoadBalancer (~$12/mo — the first standing cost beyond nodes; torn
+# down with the cluster).
+#
+# platform-ingress is a named exception in POL-04 (controller + webhook-certgen
+# images come from registry.k8s.io, not DOCR) and POL-05 (trusted platform
+# tooling, no NetworkPolicy required). It stays UNDER POL-02 (the controller runs
+# non-root, drops ALL caps, adds only NET_BIND_SERVICE — restricted-compliant)
+# and UNDER POL-03 (limits on the controller + both admission-webhook jobs).
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: ingress-nginx
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://kubernetes.github.io/ingress-nginx
+    chart: ingress-nginx
+    targetRevision: 4.15.1
+    helm:
+      valuesObject:
+        controller:
+          replicaCount: 1
+          service:
+            type: LoadBalancer
+          # make nginx the default IngressClass so Ingress resources resolve to it
+          ingressClassResource:
+            default: true
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+          admissionWebhooks:
+            enabled: true
+            # POL-03: the kube-webhook-certgen jobs default to no limits.
+            createSecretJob:
+              resources:
+                requests: {cpu: 25m, memory: 32Mi}
+                limits: {cpu: 100m, memory: 64Mi}
+            patchWebhookJob:
+              resources:
+                requests: {cpu: 25m, memory: 32Mi}
+                limits: {cpu: 100m, memory: 64Mi}
+        defaultBackend:
+          enabled: false
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: platform-ingress
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
