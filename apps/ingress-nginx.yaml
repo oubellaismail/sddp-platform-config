@@ -29,15 +29,16 @@ spec:
             type: LoadBalancer
           # WAF: ModSecurity + OWASP Core Rule Set (both bundled in the 1.15.1
           # image) — the request-surface half of the threat-model's C-17 gate.
-          # Rolled out audit-first: SecRuleEngine DetectionOnly LOGS violations
-          # without blocking (flip to `On` once demo traffic shows no false
-          # positives). Audit log → stdout as JSON → Alloy → Loki, so WAF hits
-          # are queryable in Grafana with the other security signals.
+          # Rolled out audit-first (DetectionOnly) then flipped to `On`
+          # (blocking) after validating: attacks scored over the anomaly
+          # threshold while grafana/frontend legit traffic stayed clean. Audit
+          # log → stdout as JSON → Alloy → Loki, so WAF hits are queryable in
+          # Grafana with the other security signals.
           config:
             enable-modsecurity: "true"
             enable-owasp-modsecurity-crs: "true"
             modsecurity-snippet: |
-              SecRuleEngine DetectionOnly
+              SecRuleEngine On
               SecRequestBodyAccess On
               SecAuditEngine RelevantOnly
               SecAuditLog /dev/stdout
