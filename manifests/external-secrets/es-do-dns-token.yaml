@@ -1,0 +1,23 @@
+# digitalocean-dns-token — the DigitalOcean API token cert-manager's built-in
+# DNS-01 solver uses to create/clean up the ACME challenge TXT records in DO DNS.
+# Materialized by ESO from the `do_dns_token` value in Infisical (seed a DO token
+# with write access to Domains). DNS-01 is used instead of HTTP-01 so no ACME
+# solver pod runs in an application namespace — the app namespaces stay
+# signed-DOCR-only with no exceptions.
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: digitalocean-dns-token
+  namespace: cert-manager
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    name: infisical
+    kind: ClusterSecretStore
+  target:
+    name: digitalocean-dns-token
+    creationPolicy: Owner
+  data:
+    - secretKey: access-token
+      remoteRef:
+        key: do_dns_token

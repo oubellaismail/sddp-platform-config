@@ -1,12 +1,14 @@
-# Let's Encrypt production ClusterIssuer. HTTP-01 challenge solved through the
-# ingress-nginx controller: cert-manager provisions a temporary Ingress for
-# /.well-known/acme-challenge/... so Let's Encrypt can validate domain control.
-# Requires the DNS A record (e.g. grafana.project-demo.tech) to already point at
-# the ingress LoadBalancer IP before a Certificate will issue.
+# Let's Encrypt production ClusterIssuer, DNS-01 challenge via DigitalOcean DNS
+# (cert-manager's built-in `digitalocean` solver — no third-party webhook).
 #
-# For dry-run/testing without hitting LE production rate limits (5 certs/week/
-# domain), swap the server to the staging endpoint:
-#   https://acme-staging-v02.api.letsencrypt.org/directory
+# DNS-01 (not HTTP-01) deliberately: HTTP-01 spins up an ACME solver pod in the
+# certificate's own namespace, which for an application namespace (sddp-app)
+# would be rejected by the signed-DOCR-only admission policies. DNS-01 proves
+# domain control with a TXT record instead, so no solver pod runs anywhere and
+# the app namespaces keep their guarantees intact.
+#
+# The DO API token comes from the `digitalocean-dns-token` secret (ESO-synced
+# from Infisical `do_dns_token`; a DO token with write access to Domains).
 apiVersion: cert-manager.io/v1
 kind: ClusterIssuer
 metadata:
@@ -18,6 +20,8 @@ spec:
     privateKeySecretRef:
       name: letsencrypt-account-key
     solvers:
-      - http01:
-          ingress:
-            ingressClassName: nginx
+      - dns01:
+          digitalocean:
+            tokenSecretRef:
+              name: digitalocean-dns-token
+              key: access-token
