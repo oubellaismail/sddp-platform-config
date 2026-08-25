@@ -93,6 +93,10 @@ spec:
                 # platform-observability: Loki/Alloy/Grafana — trusted platform
                 # tooling like argocd/kyverno, not an application namespace.
                 - platform-observability
+                # platform-ingress + cert-manager: trusted platform tooling
+                # (north-south ingress + TLS issuance), not application namespaces.
+                - platform-ingress
+                - cert-manager
       context:
         # List the NetworkPolicy objects in THIS pod's namespace and reduce to
         # a count. Deliberately NO label_match against the pod's selector: that

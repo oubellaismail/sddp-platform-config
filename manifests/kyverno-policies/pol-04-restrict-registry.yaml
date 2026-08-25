@@ -77,6 +77,12 @@ spec:
                 # platform-observability: Loki/Alloy/Grafana pull from
                 # docker.io/grafana, their own vendor registry — not DOCR.
                 - platform-observability
+                # platform-ingress: ingress-nginx controller + webhook-certgen
+                # images come from registry.k8s.io, not DOCR.
+                - platform-ingress
+                # cert-manager: controller/webhook/cainjector images from
+                # quay.io/jetstack, not DOCR.
+                - cert-manager
       validate:
         # Rolled out Audit-first (PolicyReports flagged nothing — no app-namespace
         # workloads yet), then flipped to Enforce — same fail-closed discipline as

@@ -1,0 +1,23 @@
+# Let's Encrypt production ClusterIssuer. HTTP-01 challenge solved through the
+# ingress-nginx controller: cert-manager provisions a temporary Ingress for
+# /.well-known/acme-challenge/... so Let's Encrypt can validate domain control.
+# Requires the DNS A record (e.g. grafana.project-demo.tech) to already point at
+# the ingress LoadBalancer IP before a Certificate will issue.
+#
+# For dry-run/testing without hitting LE production rate limits (5 certs/week/
+# domain), swap the server to the staging endpoint:
+#   https://acme-staging-v02.api.letsencrypt.org/directory
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt
+spec:
+  acme:
+    server: https://acme-v02.api.letsencrypt.org/directory
+    email: oubellaismail00@gmail.com
+    privateKeySecretRef:
+      name: letsencrypt-account-key
+    solvers:
+      - http01:
+          ingress:
+            ingressClassName: nginx

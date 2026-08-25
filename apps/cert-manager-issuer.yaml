@@ -1,0 +1,30 @@
+# The Let's Encrypt ClusterIssuer, delivered after cert-manager's CRDs exist.
+# sync-wave "2" (cert-manager itself is the default wave 0) so the root app-of-
+# apps waits for cert-manager to be Healthy before applying the ClusterIssuer —
+# otherwise the CR fails admission (its CRD isn't registered yet). ArgoCD also
+# retries, so a wave race self-heals regardless.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: cert-manager-issuer
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  project: default
+  source:
+    repoURL: git@github.com:oubellaismail/sddp-platform-config.git
+    targetRevision: main
+    path: manifests/cert-manager
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: cert-manager
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    retry:
+      limit: 10
+      backoff:
+        duration: 15s
+        maxDuration: 3m
