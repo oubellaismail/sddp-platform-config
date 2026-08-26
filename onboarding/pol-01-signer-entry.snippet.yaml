@@ -1,0 +1,24 @@
+# POL-01 signer entry — the ONE reviewed trust act when onboarding a service.
+#
+# A new service signs its images with its own keyless OIDC identity (its
+# release.yml @refs/heads/main). For the cluster to admit those images, that exact
+# identity must be added to POL-01's trusted-signer allowlist.
+#
+# HOW: copy the entry below (fill in <owner> and <svc>) into the
+# attestors[0].entries list in:
+#     manifests/kyverno-policies/pol-01-verify-signature.yaml
+# then open a PR. The list is a set of `count: 1` OR-ed entries — "signed by at
+# least one trusted first-party signer" — so onboarding = appending one entry.
+#
+# KEEP IT EXACT. Pin the full workflow ref @refs/heads/main; never a wildcard or
+# a broad subjectRegExp — a loose subject would silently accept unintended
+# signers. This list is the auditable record of who may sign for the cluster, and
+# adding to it is a deliberate, human-reviewed decision — never scripted.
+#
+# This entry must be merged and enforcing BEFORE the service's config-bump PR is
+# merged, or admission is fail-closed and rejects the new-signer digest.
+- keyless:
+    issuer: "https://token.actions.githubusercontent.com"
+    subject: "https://github.com/<owner>/sddp-<svc>/.github/workflows/release.yml@refs/heads/main"
+    rekor:
+      url: "https://rekor.sigstore.dev"
