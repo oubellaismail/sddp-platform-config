@@ -136,3 +136,15 @@ spec:
                     subject: "https://github.com/oubellaismail/sddp-widget/.github/workflows/release.yml@refs/heads/main"
                     rekor:
                       url: "https://rekor.sigstore.dev"
+                # demo-app — a service of the demo project, its own release identity.
+                - keyless:
+                    issuer: "https://token.actions.githubusercontent.com"
+                    subject: "https://github.com/oubellaismail/demo-app/.github/workflows/release.yml@refs/heads/main"
+                    rekor:
+                      url: "https://rekor.sigstore.dev"
+                # demo-web — a service of the demo project, its own release identity.
+                - keyless:
+                    issuer: "https://token.actions.githubusercontent.com"
+                    subject: "https://github.com/oubellaismail/demo-web/.github/workflows/release.yml@refs/heads/main"
+                    rekor:
+                      url: "https://rekor.sigstore.dev"
