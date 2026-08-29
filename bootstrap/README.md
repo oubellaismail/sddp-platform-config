@@ -49,7 +49,8 @@ point each service's release pipeline at this project's config repo by setting a
 repository variable (it defaults to `sddp-app-config` for the original project):
 
 ```bash
-gh variable set CONFIG_REPO --repo <owner>/demo-app --body <owner>/demo-config
+# value is the config repo NAME (owner is inferred); defaults to sddp-app-config
+gh variable set CONFIG_REPO --repo <owner>/demo-app --body demo-config
 ```
 
 Onboard each service by its **full repo name** (`demo-app`, `demo-web`), which is

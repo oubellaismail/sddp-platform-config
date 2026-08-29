@@ -99,7 +99,7 @@ Next (manual, by design):
   4. For EACH service (repo named ${PROJECT}-<service>, e.g. ${PROJECT}-app):
        a. create it from sddp-service-template; set its CONFIG_REPO repo variable to
           '${OWNER}/${PROJECT}-config' so its release pipeline auto-PRs the right repo:
-            gh variable set CONFIG_REPO --repo ${OWNER}/${PROJECT}-<service> --body ${OWNER}/${PROJECT}-config
+            gh variable set CONFIG_REPO --repo ${OWNER}/${PROJECT}-<service> --body ${PROJECT}-config
           then let its pipeline sign + promote.
        b. add its signer entry to POL-01 (onboarding/pol-01-signer-entry.snippet.yaml,
           subject .../${PROJECT}-<service>/.github/workflows/release.yml@refs/heads/main).
