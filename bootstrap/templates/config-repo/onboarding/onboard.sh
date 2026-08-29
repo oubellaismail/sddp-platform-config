@@ -4,13 +4,14 @@
 # ArgoCD Application picks up automatically (it recurses manifests/).
 #
 # This is the project's own copy of the proven service onboarder. The project
-# slug (__PROJECT__) is already baked into service-template/ (namespace, image
-# name sddp-registry/__PROJECT__-<svc>), so this script only fills per-service
-# values. Run from the repo root:
+# slug (__PROJECT__) is already baked into service-template/ as the namespace, so
+# this script only fills per-service values. Run from the repo root:
 #
 #   ./onboarding/onboard.sh <svc> --digest <sha256:...> [--port <n>] [--host <fqdn>]
 #
-# <svc>       service slug, e.g. `app` (image is __PROJECT__-<svc>, dir is manifests/<svc>/)
+# <svc>       the service's FULL repo name, <project>-<service> (e.g. __PROJECT__-app);
+#             image is sddp-registry/<svc>, dir is manifests/<svc>/ — matching the
+#             release pipeline's promoted image name and config path exactly.
 # --digest    the first SIGNED digest from the service's release run (required)
 # --port      container/service port (default 3000)
 # --host      public FQDN -> also generates an Ingress (TLS + WAF + rate-limit)
