@@ -1,0 +1,36 @@
+# DNS egress for every pod in __PROJECT__, with L7 DNS visibility.
+#
+# Sits on top of the default-deny-all floor (networkpolicy.yaml). Without this,
+# default-deny egress blocks name resolution and pods can't resolve in-cluster
+# Service names or anything else. This is the ONE allow every project needs
+# namespace-wide; all other reachability (svcA -> svcB) is authored per service
+# under manifests/<svc>/.
+#
+# The matchPattern "*" allows every name but routes each lookup through Cilium's
+# DNS proxy, so DNS flows are observable in Hubble and constrainable later — the
+# enforcement seam for detecting/limiting DNS tunnelling out of an app pod.
+#
+# sync-wave "-1" to land alongside the default-deny floor, before pods talk.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: allow-dns-egress
+  namespace: __PROJECT__
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+spec:
+  endpointSelector: {}
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            k8s-app: kube-dns
+            io.kubernetes.pod.namespace: kube-system
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+          rules:
+            dns:
+              - matchPattern: "*"
