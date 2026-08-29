@@ -96,9 +96,13 @@ Next (manual, by design):
   3. Review + open a PR adding apps/${PROJECT}.yaml here (sddp-platform-config).
      On merge, the root app-of-apps creates the AppProject + Application, and the
      '${PROJECT}' namespace comes up with the default-deny floor + DNS egress.
-  4. For EACH service (e.g. ${PROJECT}-app):
-       a. create it from sddp-service-template; let its pipeline sign + promote.
+  4. For EACH service (repo named ${PROJECT}-<service>, e.g. ${PROJECT}-app):
+       a. create it from sddp-service-template; set its CONFIG_REPO repo variable to
+          '${OWNER}/${PROJECT}-config' so its release pipeline auto-PRs the right repo:
+            gh variable set CONFIG_REPO --repo ${OWNER}/${PROJECT}-<service> --body ${PROJECT}-config
+          then let its pipeline sign + promote.
        b. add its signer entry to POL-01 (onboarding/pol-01-signer-entry.snippet.yaml,
-          subject .../${PROJECT}-<svc>/.github/workflows/release.yml@refs/heads/main).
-       c. in ${PROJECT}-config: ./onboarding/onboard.sh <svc> --digest sha256:... [--host ...]
+          subject .../${PROJECT}-<service>/.github/workflows/release.yml@refs/heads/main).
+       c. in ${PROJECT}-config, onboard with the FULL repo name as <svc>:
+            ./onboarding/onboard.sh ${PROJECT}-<service> --digest sha256:... [--host ...]
 EOF

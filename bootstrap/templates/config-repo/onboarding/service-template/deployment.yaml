@@ -2,8 +2,10 @@
 #
 # The image is the SIGNED digest in the production registry (DOCR) — the only
 # registry the cluster pulls from — so it is admitted by the signature +
-# trusted-registry policies. Image name follows the <project>-<service>
-# convention: registry.digitalocean.com/sddp-registry/__PROJECT__-__SVC__. The pod
+# trusted-registry policies. __SVC__ is the FULL service repo name under the
+# <project>-<service> convention (e.g. demo-app), which is exactly what the
+# release pipeline promotes as the image name and derives the config path from
+# (registry.digitalocean.com/sddp-registry/__SVC__, manifests/__SVC__/). The pod
 # is non-root with a RuntimeDefault seccomp profile, drops all capabilities, and
 # forbids privilege escalation; it stays in the small resource tier. The
 # namespace's default-deny NetworkPolicy plus this service's own allow-rules
@@ -35,7 +37,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: __SVC__
-          image: registry.digitalocean.com/sddp-registry/__PROJECT__-__SVC__@__DIGEST__
+          image: registry.digitalocean.com/sddp-registry/__SVC__@__DIGEST__
           ports:
             - name: http
               containerPort: __PORT__
@@ -43,7 +45,7 @@ spec:
             # The app reports its own name (see the template's server.js). Not a
             # secret — a plain label — so it is inline, not a secretKeyRef.
             - name: SERVICE_NAME
-              value: __PROJECT__-__SVC__
+              value: __SVC__
           securityContext:
             allowPrivilegeEscalation: false
             runAsNonRoot: true

@@ -4,10 +4,12 @@ Parameterized templates + a generator for wiring a new paved-road service into
 the `__PROJECT__` namespace. These files are **tooling** — they live outside
 `manifests/`, so ArgoCD (which recurses `manifests/`) never tries to apply them.
 
-The project slug `__PROJECT__` is already baked into `service-template/` (the
-namespace and the `sddp-registry/__PROJECT__-<svc>` image name), so onboarding a
-service is identical to any other project: give it a name, a signed digest, and
-optionally a host.
+The project slug `__PROJECT__` is already baked into `service-template/` as the
+namespace. Pass the service's **full repo name** (`<project>-<service>`, e.g.
+`__PROJECT__-app`) as the `<svc>` argument — that is exactly what the release
+pipeline promotes as the image (`sddp-registry/<svc>`) and derives the config
+path from (`manifests/<svc>/`), so the delivery matches the pipeline with no
+edits.
 
 ## Use
 
@@ -15,12 +17,12 @@ From the repo root, once the service's first release has signed + promoted an
 image (grab the digest from its release run summary):
 
 ```bash
-./onboarding/onboard.sh app --digest sha256:<64hex> --host app.<your-domain>
+./onboarding/onboard.sh __PROJECT__-app --digest sha256:<64hex> --host app.<your-domain>
 ```
 
-That stamps `manifests/app/{deployment,service,cnp,ingress}.yaml` from
-`service-template/`, substituting the service name, port, host, and digest.
-ArgoCD auto-discovers `manifests/app/` on merge.
+That stamps `manifests/__PROJECT__-app/{deployment,service,cnp,ingress}.yaml`
+from `service-template/`, substituting the service name, port, host, and digest.
+ArgoCD auto-discovers the folder on merge.
 
 ## What the generator does NOT do (manual by design)
 
