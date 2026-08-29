@@ -4,11 +4,12 @@
 # release.yml @refs/heads/main). For the cluster to admit those images, that exact
 # identity must be added to POL-01's trusted-signer allowlist.
 #
-# HOW: copy the entry below (fill in <owner> and <svc>) into the
-# attestors[0].entries list in:
+# HOW: copy the entry below into the attestors[0].entries list in:
 #     manifests/kyverno-policies/pol-01-verify-signature.yaml
-# then open a PR. The list is a set of `count: 1` OR-ed entries — "signed by at
-# least one trusted first-party signer" — so onboarding = appending one entry.
+# Fill in <owner> and the service's repo name, which follows the
+# <project>-<service> convention (e.g. sddp-app, sddp-frontend, demo-app). Then
+# open a PR. The list is a set of `count: 1` OR-ed entries — "signed by at least
+# one trusted first-party signer" — so onboarding = appending one entry.
 #
 # KEEP IT EXACT. Pin the full workflow ref @refs/heads/main; never a wildcard or
 # a broad subjectRegExp — a loose subject would silently accept unintended
@@ -19,6 +20,6 @@
 # merged, or admission is fail-closed and rejects the new-signer digest.
 - keyless:
     issuer: "https://token.actions.githubusercontent.com"
-    subject: "https://github.com/<owner>/sddp-<svc>/.github/workflows/release.yml@refs/heads/main"
+    subject: "https://github.com/<owner>/<project>-<svc>/.github/workflows/release.yml@refs/heads/main"
     rekor:
       url: "https://rekor.sigstore.dev"

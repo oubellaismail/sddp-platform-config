@@ -1,0 +1,67 @@
+# GitOps entry for a whole PROJECT (__PROJECT__), stamped by bootstrap/new-project.sh
+# into apps/__PROJECT__.yaml. Discovered by the root app-of-apps (which recurses
+# apps/). This is the project-level twin of the per-service onboarding trust step:
+# a service joins an existing project by a POL-01 signer entry alone, but a NEW
+# project needs its own ArgoCD scope + delivery, which is exactly the two resources
+# below.
+#
+#   1. AppProject — scopes ArgoCD's authority for this project (ADR-001 / cluster-
+#      architecture-spec §6.2): it may pull ONLY from __PROJECT__-config and deploy
+#      ONLY into the __PROJECT__ namespace, never platform namespaces or another
+#      project. Per-project least-privilege, identical in shape to sddp-app.
+#   2. Application — the actual delivery, pointed at __PROJECT__-config/manifests,
+#      creating the __PROJECT__ namespace on first sync (CreateNamespace=true).
+---
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: __PROJECT__
+  namespace: argocd
+  annotations:
+    # Create the project before the Application that references it.
+    argocd.argoproj.io/sync-wave: "-1"
+spec:
+  description: "__PROJECT__ project — per-project ArgoCD scope"
+  # Only this project's config repo may be a source for anything in this project.
+  sourceRepos:
+    - git@github.com:__OWNER__/__PROJECT__-config.git
+  # Namespaced resources may land ONLY in the __PROJECT__ namespace.
+  destinations:
+    - server: https://kubernetes.default.svc
+      namespace: __PROJECT__
+  # Cluster-scoped resources: only Namespace (so the app can bootstrap its own
+  # namespace via CreateNamespace). It cannot manage CRDs, ClusterRoles, admission
+  # webhooks, etc. — those stay platform-owned. The destinations list is what
+  # confines the actual workloads to __PROJECT__.
+  clusterResourceWhitelist:
+    - group: ""
+      kind: Namespace
+  # All namespaced kinds are allowed (within the destination namespace only).
+  namespaceResourceWhitelist:
+    - group: "*"
+      kind: "*"
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: __PROJECT__
+  namespace: argocd
+spec:
+  project: __PROJECT__
+  source:
+    # SSH form — must match the per-repo deploy-key credential Secret url EXACTLY,
+    # or ArgoCD can't match the credential to this repo (INFRA-005 lesson).
+    repoURL: git@github.com:__OWNER__/__PROJECT__-config.git
+    targetRevision: main
+    path: manifests
+    directory:
+      recurse: true   # picks up the default-deny floor + every manifests/<svc>/
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: __PROJECT__
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

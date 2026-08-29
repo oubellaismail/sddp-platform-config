@@ -1,0 +1,26 @@
+# Namespace isolation floor for __PROJECT__.
+#
+# The required baseline every admitted pod depends on: with no explicit allow
+# rules, all ingress and egress are denied until something grants them. This is
+# also the object that satisfies POL-05 ("a NetworkPolicy must exist in the
+# namespace") — so it must land before any pod is admitted.
+#
+# The per-service allow-graph (who may talk to whom) is NOT here — it is authored
+# per service as CiliumNetworkPolicy under manifests/<svc>/ (see onboarding/), on
+# top of this floor. The one namespace-wide allow every project needs — DNS — is
+# in dns-egress.cnp.yaml alongside this file.
+#
+# sync-wave "-1" so the floor exists before any pod is admitted and before any
+# pod tries to talk.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-all
+  namespace: __PROJECT__
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+    - Egress
