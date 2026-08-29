@@ -29,9 +29,11 @@
 # Infisical (manifests/external-secrets/es-docr-read.yaml) — no longer a hand-run
 # `kubectl create secret` after each cluster recreate.
 #
-# Scope. imageReferences is scoped to the FIRST-PARTY set (sddp-*) so POL-01 never
-# matches the stock Postgres db (signed, if at all, by its own vendor, not our CI).
-# The db is governed by POL-04's allowlist instead. Net model: DOCR images must be
+# Scope. imageReferences matches the whole production registry
+# (registry.digitalocean.com/sddp-registry/*) — every first-party pipeline image
+# across all projects, keyed on the registry, not a name prefix. POL-01 never
+# matches the stock Postgres db (a different registry host, cgr.dev/chainguard),
+# which is governed by POL-04's allowlist instead. Net model: DOCR images must be
 # signed (POL-01) AND only DOCR may be pulled (POL-04). Keyless per ADR-006.
 apiVersion: kyverno.io/v1
 kind: ClusterPolicy
@@ -41,9 +43,9 @@ metadata:
     policies.kyverno.io/title: "POL-01 — Verify image signatures (keyless)"
     policies.kyverno.io/category: "Artifact provenance"
     policies.kyverno.io/description: >-
-      First-party application images (registry.digitalocean.com/sddp-registry/
-      sddp-*) must carry a valid keyless Cosign signature from one of the trusted
-      first-party service repos' pinned OIDC release identities (explicit
+      First-party application images (registry.digitalocean.com/sddp-registry/*,
+      any project) must carry a valid keyless Cosign signature from one of the
+      trusted first-party service repos' pinned OIDC release identities (explicit
       allowlist — sddp-app, sddp-frontend). Signatures are verified from DOCR at
       admission using the modern Sigstore-bundle format (type: SigstoreBundle);
       Kyverno authenticates to private DOCR via the docr-read secret in the
@@ -78,9 +80,16 @@ spec:
                 - kyverno
       verifyImages:
         - imageReferences:
-            # FIRST-PARTY ONLY. Must NOT match the stock Postgres db — that is
-            # POL-04's job. A broader pattern here would reject the db.
-            - "registry.digitalocean.com/sddp-registry/sddp-*"
+            # FIRST-PARTY ONLY — scoped to the production registry (DOCR), NOT to a
+            # name prefix. Every image in registry.digitalocean.com/sddp-registry is
+            # a first-party pipeline-built artifact and MUST be signed by a trusted
+            # signer, regardless of its <project>-<service> name (e.g. sddp-app,
+            # demo-app). Scoping this by a `sddp-*` name prefix (the old value) let a
+            # differently-named project image be admitted by POL-04's registry
+            # allowlist while never matching POL-01 — i.e. run UNSIGNED. The stock
+            # Postgres db is still NOT matched here (it lives at cgr.dev/chainguard,
+            # a different registry host) — that remains POL-04's job.
+            - "registry.digitalocean.com/sddp-registry/*"
           type: SigstoreBundle       # our sigs are Sigstore bundles, not legacy .sig tags
           required: true             # an unsigned matching image is a rejection
           verifyDigest: true         # images must be digest-referenceable (ADR-004)
