@@ -42,6 +42,24 @@ That produces:
 - Each service's POL-01 signer entry (a reviewed trust act, never scripted).
 - Every PR merge (the deploy gate).
 
+## Per-service wiring for a new project
+
+Services are created from `sddp-service-template` as usual, with one extra step:
+point each service's release pipeline at this project's config repo by setting a
+repository variable (it defaults to `sddp-app-config` for the original project):
+
+```bash
+gh variable set CONFIG_REPO --repo <owner>/demo-app --body <owner>/demo-config
+```
+
+Onboard each service by its **full repo name** (`demo-app`, `demo-web`), which is
+what the pipeline promotes as the image and derives the config path from:
+
+```bash
+# in demo-config
+./onboarding/onboard.sh demo-app --digest sha256:<64hex> --host app.<domain>
+```
+
 ## Templates
 
 | File | Becomes |
